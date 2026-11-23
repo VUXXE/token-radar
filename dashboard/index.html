@@ -11,6 +11,8 @@
 <!-- The page is static: data.js, written beside dashboard/ by main.ts, carries the whole dataset
      and app.js renders it. No fetch, no network. -->
 <main id="board" tabindex="-1" aria-busy="true"></main>
+<!-- Scripts load in order: data.js first, so window.RADAR exists before app.js
+     renders the board from it. Both are local files; nothing is fetched. -->
 <script src="../data.js"></script>
 <script src="app.js"></script>
 </body>
