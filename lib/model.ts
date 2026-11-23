@@ -81,7 +81,9 @@ export const MODEL: ModelConstants = {
 /** The model's version label: the dashboard names it and the rules quote it. */
 export const MODEL_VERSION = 'radar-2';
 
-/** How many pre-token protocols below the watchlist floor the early radar carries, by TVL. */
+/** How many pre-token protocols below the watchlist floor the early radar carries, by TVL. A
+ * ceiling, not a target: the board carries fewer when fewer rankable protocols exist below the
+ * floor (226 rows in the sealed snapshot: 40 watchlist plus 186 early). */
 export const EARLY_ROWS = 260;
 
 /** How many live-token protocols the Live token view carries, by market cap. */

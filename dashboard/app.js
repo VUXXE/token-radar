@@ -189,6 +189,8 @@
       return hay.indexOf(q) >= 0;
     });
   }
+  // Sorts the filtered rows by the chosen key. The default is implied value, descending, which is
+  // the board's own order (rank 1 first); a tie falls back to the slug so the order is stable.
   function sortedRows(list) {
     var key = state.sort;
     return list.slice().sort(function (a, b) {

@@ -154,6 +154,8 @@ tbody tr[data-selected="true"] { background: #1a2b21; }
 .steps b { display: block; font-weight: 500; }
 .cost { color: var(--muted); font-size: 12px; font-family: var(--font-num); }
 
+/* Narrow screens: the lede stacks, the facts lose their left border for a top one, and the search
+   input takes the full width, so the board stays usable on a phone. */
 @media (max-width: 900px) {
   .shell { padding: var(--step-4); }
   .lede { grid-template-columns: 1fr; gap: var(--step-4); }

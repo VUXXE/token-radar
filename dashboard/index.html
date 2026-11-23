@@ -8,6 +8,8 @@
 </head>
 <body>
 <a class="skip" href="#board">Skip to the board</a>
+<!-- The page is static: data.js, written beside dashboard/ by main.ts, carries the whole dataset
+     and app.js renders it. No fetch, no network. -->
 <main id="board" tabindex="-1" aria-busy="true"></main>
 <script src="../data.js"></script>
 <script src="app.js"></script>

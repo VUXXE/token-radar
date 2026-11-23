@@ -15,6 +15,11 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json
 
+// Inputs and outputs, in one place: the input is the sealed snapshot (a JSON document with the
+// protocol index and the watchlist). The outputs are board.json (the ranked board), data.js (the
+// dashboard's dataset), dashboard/ and screenshots/ copied verbatim, and dossier.json (the judge's
+// summary) written last, so the scorer can rebuild it from /output and compare bytes.
+
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +50,12 @@ if (!existsSync(inputFile)) {
 const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
 
 const snapshot = parseSnapshot(readFileSync(inputFile, 'utf8'));
+if (snapshot.protocols.length === 0) {
+  // An empty snapshot would score an empty board and fail on coverage with a confusing message;
+  // refuse it here with the cause named.
+  process.stderr.write(`token radar: the snapshot at ${inputFile} carries no protocols: it cannot be scored\n`);
+  process.exit(2);
+}
 const { board, radar } = buildRadar(snapshot);
 const issue = boardIssue(board, snapshot);
 if (issue !== null) {
