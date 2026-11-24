@@ -69,6 +69,15 @@
     return 1 + (clampGrowth(change7d, model) / 100) * model.growth_weight;
   }
 
+  /** The momentum factor: 1 plus the clamped category momentum times the model's
+   * weight. The category momentum is the median seven-day change of the category's
+   * live-token peers, carried on the row by the model. */
+  function momentumMultiplier(categoryMomentum, model) {
+    var raw = categoryMomentum === null || categoryMomentum === undefined ? 0 : categoryMomentum;
+    var clamped = Math.min(model.momentum_cap, Math.max(model.momentum_floor, raw));
+    return 1 + (clamped / 100) * model.momentum_weight;
+  }
+
   /** The maturity factor: a protocol that has run longer with no token scores higher,
    * up to the model's ceiling; an unknown age reads as the model's unknown-age days. */
   function maturityMultiplier(ageDays, model) {
@@ -83,10 +92,12 @@
   }
 
   /** A row's implied value, recomputed from its own figures: TVL times the category
-   * multiple times the growth, maturity and breadth factors, rounded and never below $1. */
+   * multiple times the growth, momentum, maturity and breadth factors, rounded and
+   * never below $1. */
   function recomputeImplied(row, model) {
     return Math.max(1, Math.round(row.tvl_usd * row.category_multiple
       * growthMultiplier(row.change_7d, model)
+      * momentumMultiplier(row.category_momentum, model)
       * maturityMultiplier(row.age_days, model)
       * breadthMultiplier((row.chains || []).length, model)));
   }
@@ -229,8 +240,26 @@
     return s;
   }
 
-  /** A protocol's farm plan: seven steps, each an action with a cost and a time. Gas
-   * is priced on the protocol's own chain, capital on its TVL, the hold on its age. */
+  /** The one risk that matters most for this protocol, from its own figures: a
+   * falling week, a thin pool, or a young protocol each get their own warning, so the
+   * plan names the risk instead of a generic caution. */
+  function riskFor(p) {
+    var change = p.change_7d;
+    if (change !== null && change !== undefined && change < -20) {
+      return 'TVL fell ' + Math.abs(Math.round(change)) + '% in the last week — check the trend is turning before you add capital, and size the position for a protocol that is shrinking.';
+    }
+    if (p.tvl_usd < 10000000) {
+      return 'TVL is under $10M, so the pool is thin — check slippage on a small test exit before you commit the full position.';
+    }
+    if (p.age_days !== null && p.age_days !== undefined && p.age_days < 90) {
+      return 'The protocol is under 90 days old — check its points program and its audit status before you commit, and treat the position as experimental.';
+    }
+    return "Smart-contract risk is real on any protocol — check the protocol's audit and its points page, and never farm with funds you cannot afford to lose.";
+  }
+
+  /** A protocol's farm plan: eight steps, each an action with a cost and a time. Gas
+   * is priced on the protocol's own chain, capital on its TVL, the hold on its age,
+   * and the risk step on the one risk its own figures name. */
   function farmSteps(p) {
     var chain = chainOf(p);
     var gas = gasFor(chain);
@@ -242,6 +271,7 @@
       { text: secondActionFor(p, chain), cost: 'about ' + dollars(gas * 3) + ' of gas on ' + chain, time: '15 minutes' },
       { text: 'Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote.', cost: 'about ' + dollars(gas) + ' of gas a week on ' + chain, time: '10 minutes a week' },
       { text: 'Hold the position for at least ' + hold + ' days so the activity is counted in more than one snapshot.', cost: 'the $' + capital + ' stays in the position', time: hold + ' days' },
+      { text: riskFor(p), cost: 'nothing but the check', time: '5 minutes a week' },
       { text: "Before you withdraw, open the protocol's own points or rewards page and claim only from the link it publishes.", cost: 'no fee to check, and never pay to claim', time: '10 minutes' },
       { text: 'Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.', cost: 'nothing but the log', time: '5 minutes' }
     ].map(stepText);
@@ -316,10 +346,12 @@
     );
   }
 
-  /** The lede: what the board ranks, and the four facts that say how much of it there is. */
+  /** The lede: what the board ranks, and the radar scope with the five strongest
+   * contacts, nearest the centre first. */
   function lede() {
     return el('section', { class: 'lede' },
       el('div', null,
+        el('span', { class: 'kicker', text: 'The next token launch, before it happens.' }),
         el('h1', { text: dataset.watchlist_size + ' watchlist protocols, ranked by implied value' }),
         el('p', null,
           'The watchlist is the floor: every protocol with at least ',
@@ -329,12 +361,52 @@
           ' pre-token protocols below that floor. Each category is priced off its own live-token peers, so a lending protocol and a DEX are not valued at the same multiple. Implied value is a model, not a promise.'
         )
       ),
-      el('div', { class: 'facts' },
-        el('div', { class: 'fact' }, el('span', { text: 'Watchlist covered' }), el('b', { text: dataset.watchlist_size + ' / ' + dataset.watchlist_size })),
-        el('div', { class: 'fact' }, el('span', { text: 'Pre-token rows scored' }), el('b', { text: String(dataset.board_size) })),
-        el('div', { class: 'fact' }, el('span', { text: 'Early rows below the floor' }), el('b', { text: String(dataset.early_size) })),
-        el('div', { class: 'fact' }, el('span', { text: 'Live-token protocols set aside' }), el('b', { text: String(dataset.live_size) }))
+      scope()
+    );
+  }
+
+  /** The radar scope: the five strongest contacts on a dial, nearest the centre
+   * first. Radius is the log of implied value, so the strongest contact sits nearest
+   * the centre; angle spreads by rank so no two contacts overlap. */
+  function scope() {
+    var top = dataset.rows.slice(0, 5);
+    var dial = el('div', { class: 'scope-dial' });
+    var maxLog = Math.log10(top[0].implied_value_usd || 1);
+    var minLog = Math.log10(top[top.length - 1].implied_value_usd || 1);
+    var angles = [-70, -10, 50, 120, 185];
+    top.forEach(function (r, i) {
+      var logVal = Math.log10(r.implied_value_usd || 1);
+      var frac = maxLog === minLog ? 0.5 : (maxLog - logVal) / (maxLog - minLog);
+      var radius = 0.14 + 0.68 * frac;
+      var angle = angles[i] * Math.PI / 180;
+      var x = 50 + radius * 50 * Math.cos(angle);
+      var y = 50 + radius * 50 * Math.sin(angle);
+      dial.appendChild(el('span', {
+        class: 'blip' + (i === 0 ? ' first' : ''),
+        style: 'left:' + x.toFixed(1) + '%;top:' + y.toFixed(1) + '%',
+        text: String(r.rank),
+        title: r.name + ' — ' + fmtUsd(r.implied_value_usd)
+      }));
+    });
+    var first = top[0];
+    return el('div', { class: 'scope' }, dial,
+      el('div', { class: 'scope-side' },
+        el('span', { class: 'label', text: 'Strongest signal' }),
+        el('span', { class: 'strong', text: first.name }),
+        el('span', { class: 'strong-value', text: fmtUsd(first.implied_value_usd) + ' implied' }),
+        el('span', { class: 'note', text: 'The top five contacts, nearest the centre first.' })
       )
+    );
+  }
+
+  /** The signal strip: the four facts that say how much board there is, in one line
+   * under the lede instead of a column beside it. */
+  function factsStrip() {
+    return el('div', { class: 'facts' },
+      el('div', { class: 'fact' }, el('span', { text: 'Watchlist covered' }), el('b', { text: dataset.watchlist_size + ' / ' + dataset.watchlist_size })),
+      el('div', { class: 'fact' }, el('span', { text: 'Pre-token rows scored' }), el('b', { text: String(dataset.board_size) })),
+      el('div', { class: 'fact' }, el('span', { text: 'Early rows below the floor' }), el('b', { text: String(dataset.early_size) })),
+      el('div', { class: 'fact' }, el('span', { text: 'Live-token protocols set aside' }), el('b', { text: String(dataset.live_size) }))
     );
   }
 
@@ -395,6 +467,7 @@
     var growth = r.change_7d === null ? 'n/a' : fmtPct(r.change_7d);
     var growthClass = r.change_7d === null ? '' : r.change_7d >= 0 ? 'pos' : 'neg';
     return el('tr', {
+      class: r.rank <= 3 ? 'top3' : '',
       'data-selected': view.selected === r.slug ? 'true' : 'false',
       tabindex: '0',
       onclick: function () { openDetail(r.slug); },
@@ -499,9 +572,9 @@
       el('h2', { text: 'How implied value is computed' }),
       el('p', { class: 'sub', text: 'Every row is scored by one function of the snapshot figures. No protocol name is special-cased, and no row is hand-picked.' }),
       el('div', { class: 'formula' },
-        'implied = round( tvl_usd x ', el('b', { text: 'category multiple' }), ' x (1 + clamp(change_7d, ' + m.growth_floor + ', ' + m.growth_cap + ') / 100 x ' + m.growth_weight + ') x (' + m.maturity_floor + ' + min(age_days, ' + m.maturity_days + ') / ' + m.maturity_days + ' x ' + m.maturity_range + ') x (1 + min(chains - 1, ' + m.breadth_max_chains + ') x ' + m.breadth_per_chain + ') )'
+        'implied = round( tvl_usd x ', el('b', { text: 'category multiple' }), ' x (1 + clamp(change_7d, ' + m.growth_floor + ', ' + m.growth_cap + ') / 100 x ' + m.growth_weight + ') x (1 + clamp(category momentum, ' + m.momentum_floor + ', ' + m.momentum_cap + ') / 100 x ' + m.momentum_weight + ') x (' + m.maturity_floor + ' + min(age_days, ' + m.maturity_days + ') / ' + m.maturity_days + ' x ' + m.maturity_range + ') x (1 + min(chains - 1, ' + m.breadth_max_chains + ') x ' + m.breadth_per_chain + ') )'
       ),
-      el('p', { class: 'sub', text: 'The category multiple is the median market-cap-to-TVL of that category\u2019s live-token peers in this snapshot, shrunk toward the global median so a category with one or two peers cannot set the price, and clamped to ' + m.multiple_min + '\u2013' + m.multiple_max + 'x. TVL and seven-day growth come from the snapshot. Age is the time since the protocol was first listed, the best record of how long it has run with no token; an unlisted age uses ' + m.unknown_age_days + ' days. The early radar is every pre-token protocol below the watchlist floor, by TVL, and the live-token protocols are set aside with their market caps shown.' }),
+      el('p', { class: 'sub', text: 'The category multiple is the median market-cap-to-TVL of that category\u2019s live-token peers in this snapshot, shrunk toward the global median so a category with one or two peers cannot set the price, and clamped to ' + m.multiple_min + '\u2013' + m.multiple_max + 'x. The category momentum is the median seven-day change of those same peers, so a category whose traded protocols are holding up scores higher than one whose peers are falling. TVL and seven-day growth come from the snapshot. Age is the time since the protocol was first listed, the best record of how long it has run with no token; an unlisted age uses ' + m.unknown_age_days + ' days. The early radar is every pre-token protocol below the watchlist floor, by TVL, and the live-token protocols are set aside with their market caps shown.' }),
       el('div', { class: 'table-wrap' },
         el('table', null,
           el('caption', { class: 'sub', text: 'The eight largest categories on the board, and the multiple each one carries.' }),
@@ -540,9 +613,11 @@
         el('div', null, el('span', { text: 'TVL' }), el('b', { class: 'num', text: fmtUsd(row.tvl_usd) })),
         el('div', null, el('span', { text: 'Category multiple (' + peersLabel(row.peer_count) + ')' }), el('b', { class: 'num', text: fmtMult(row.category_multiple) })),
         el('div', null, el('span', { text: 'Seven-day growth' }), el('b', { class: 'num', text: fmtPct(row.change_7d) })),
+        el('div', null, el('span', { text: 'Category momentum' }), el('b', { class: 'num', text: fmtPct(row.category_momentum) })),
         el('div', null, el('span', { text: 'Age with no token' }), el('b', { class: 'num', text: fmtAge(row.age_days) })),
         el('div', null, el('span', { text: 'Chains (' + (row.chains || []).length + ')' }), el('b', { class: 'num', text: String(row.breadth_multiplier) })),
         el('div', null, el('span', { text: 'Growth multiplier' }), el('b', { class: 'num', text: String(row.growth_multiplier) })),
+        el('div', null, el('span', { text: 'Momentum multiplier' }), el('b', { class: 'num', text: String(row.momentum_multiplier) })),
         el('div', null, el('span', { text: 'Maturity multiplier' }), el('b', { class: 'num', text: String(row.maturity_multiplier) })),
         el('div', null, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) }))
       ),
@@ -572,6 +647,7 @@
     var shell = el('div', { class: 'shell' });
     shell.appendChild(header());
     shell.appendChild(lede());
+    shell.appendChild(factsStrip());
     if (view.tab === 'pre-token') shell.appendChild(top10());
     shell.appendChild(controls());
     shell.appendChild(view.tab === 'pre-token' ? boardTable() : liveTable());

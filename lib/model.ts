@@ -1,4 +1,4 @@
-// Token Radar's model, version radar-2.
+// Token Radar's model, version radar-3.
 //
 // One snapshot of the protocol universe goes in; one ranked board comes out. The board
 // covers every slug on the snapshot's watchlist, and it adds the early rows the radar
@@ -19,12 +19,18 @@
 //                       clamped to [multiple_min, multiple_max]
 //   growth factor     = 1 + clamp(change_7d, growth_floor, growth_cap) / 100
 //                       x growth_weight
+//   momentum factor   = 1 + clamp(category momentum, momentum_floor, momentum_cap)
+//                       / 100 x momentum_weight, where the category momentum is the
+//                       median seven-day change of the category's live-token peers:
+//                       a category whose traded protocols are holding up scores
+//                       higher than one whose peers are falling, even when the
+//                       protocol's own week is flat
 //   maturity factor   = maturity_floor + min(age_days, maturity_days)
 //                       / maturity_days x maturity_range
 //                       (age_days unknown: unknown_age_days)
 //   breadth factor    = 1 + min(chains - 1, breadth_max_chains) x breadth_per_chain
-//   implied value     = max(1, round(tvl_usd x multiple x growth x maturity
-//                       x breadth))
+//   implied value     = max(1, round(tvl_usd x multiple x growth x momentum
+//                       x maturity x breadth))
 //
 // The same function scores every row, and the peer multiples are computed from the
 // snapshot at run time, so a future snapshot re-prices every category on its own
@@ -69,9 +75,12 @@ export interface ModelConstants {
   shrink_k: number;
   breadth_per_chain: number;
   breadth_max_chains: number;
+  momentum_weight: number;
+  momentum_floor: number;
+  momentum_cap: number;
 }
 
-/** The radar-2 constants: the weights and bands every factor above is built from. */
+/** The radar-3 constants: the weights and bands every factor above is built from. */
 export const MODEL: ModelConstants = {
   growth_weight: 0.5,
   growth_floor: -60,
@@ -85,10 +94,13 @@ export const MODEL: ModelConstants = {
   shrink_k: 5,
   breadth_per_chain: 0.02,
   breadth_max_chains: 4,
+  momentum_weight: 0.3,
+  momentum_floor: -30,
+  momentum_cap: 30,
 };
 
 /** The model's version label: the dashboard names it and the rules quote it. */
-export const MODEL_VERSION = 'radar-2';
+export const MODEL_VERSION = 'radar-3';
 
 /** How many pre-token protocols below the watchlist floor the early radar carries, by
  * TVL. A ceiling, not a target: the board carries fewer when fewer rankable protocols
@@ -126,6 +138,8 @@ export interface BoardRow {
     peer_count: number;
     growth_pct: number;
     growth_multiplier: number;
+    momentum_multiplier: number;
+    momentum_pct: number;
     maturity_multiplier: number;
     breadth_multiplier: number;
     age_days: number | null;
@@ -149,6 +163,8 @@ export interface RadarRow {
   category_multiple: number;
   peer_count: number;
   growth_multiplier: number;
+  momentum_multiplier: number;
+  category_momentum: number;
   maturity_multiplier: number;
   breadth_multiplier: number;
 }
@@ -251,14 +267,45 @@ function clampMultiple(value: number, model: ModelConstants): number {
   return Math.min(model.multiple_max, Math.max(model.multiple_min, value));
 }
 
+/** The median seven-day change of each category's live-token peers, and the median
+ * across all of them: a category's momentum is how its traded protocols are moving
+ * this week. Only peers that record a change count; a category with no peer change
+ * takes the global momentum. */
+function momentumByCategory(protocols: SnapshotProtocol[]): { byCategory: Map<string, number>; global: number } {
+  const changesByCategory = new Map<string, number[]>();
+  for (const protocol of protocols) {
+    if (protocol.mcap_usd === null || protocol.mcap_usd <= 0) continue;
+    if (protocol.tvl_usd <= 0 || protocol.gecko_id === null) continue;
+    if (protocol.change_7d === null || !Number.isFinite(protocol.change_7d)) continue;
+    const category = protocol.category ?? 'Other';
+    const changes = changesByCategory.get(category);
+    if (changes === undefined) changesByCategory.set(category, [protocol.change_7d]);
+    else changes.push(protocol.change_7d);
+  }
+  const allChanges = [...changesByCategory.values()].flat();
+  const global = median(allChanges, 0);
+  const byCategory = new Map<string, number>();
+  for (const [category, changes] of changesByCategory) byCategory.set(category, median(changes, global));
+  return { byCategory, global };
+}
+
+/** Everything the model calibrates from the snapshot at run time: each category's
+ * multiple and peer count, the global median, and each category's momentum. */
+export interface Calibration {
+  byCategory: Map<string, PeerMultiple>;
+  global: number;
+  momentumByCategory: Map<string, number>;
+  globalMomentum: number;
+}
+
 /**
- * Every category's multiple, calibrated from the snapshot itself: the median
- * mcap/TVL of its live-token peers, shrunk toward the global median by peer count,
- * clamped to the model's band. A category with no live peers takes the global median
- * outright. Computed from the snapshot at run time, so a new snapshot re-prices
- * every category on its own market.
+ * Every category's multiple and momentum, calibrated from the snapshot itself: the
+ * median mcap/TVL of its live-token peers, shrunk toward the global median by peer
+ * count, clamped to the model's band, and the median seven-day change of those peers.
+ * A category with no live peers takes the global median outright. Computed from the
+ * snapshot at run time, so a new snapshot re-prices every category on its own market.
  */
-export function peerMultiples(protocols: SnapshotProtocol[], model: ModelConstants): { byCategory: Map<string, PeerMultiple>; global: number } {
+export function peerMultiples(protocols: SnapshotProtocol[], model: ModelConstants): Calibration {
   const ratiosByCategory = peerRatiosByCategory(protocols);
   const allRatios = [...ratiosByCategory.values()].flat();
   const global = median(allRatios, model.multiple_min);
@@ -267,17 +314,33 @@ export function peerMultiples(protocols: SnapshotProtocol[], model: ModelConstan
     const shrunk = shrinkToward(median(ratios, global), global, ratios.length, model.shrink_k);
     calibrated.set(category, { multiple: clampMultiple(shrunk, model), peers: ratios.length });
   }
-  return { byCategory: calibrated, global };
+  const momentum = momentumByCategory(protocols);
+  return { byCategory: calibrated, global, momentumByCategory: momentum.byCategory, globalMomentum: momentum.global };
 }
 
 /** A protocol's category multiple and how many peers set it; the global median when
  * its category has no live peers at all. */
 function categoryMultipleFor(
   category: string | null,
-  multiples: { byCategory: Map<string, PeerMultiple>; global: number },
+  multiples: Calibration,
 ): PeerMultiple {
   const peer = multiples.byCategory.get(category ?? 'Other');
   return peer === undefined ? { multiple: multiples.global, peers: 0 } : peer;
+}
+
+/** A protocol's category momentum, in per cent: the median seven-day change of its
+ * category's live-token peers, or the global momentum when the category has none. */
+function momentumFor(category: string | null, calibration: Calibration): number {
+  const momentum = calibration.momentumByCategory.get(category ?? 'Other');
+  return momentum === undefined ? calibration.globalMomentum : momentum;
+}
+
+/** The momentum factor: 1 plus the clamped category momentum times the model's
+ * weight. A category whose peers are flat scores 1.00; one whose peers fell 10% in
+ * a week scores 0.97; one whose peers rose 10% scores 1.03. */
+function momentumFactor(momentumPct: number, model: ModelConstants): number {
+  const clamped = Math.min(model.momentum_cap, Math.max(model.momentum_floor, momentumPct));
+  return 1 + (clamped / 100) * model.momentum_weight;
 }
 
 /** The seven-day growth, in per cent, a protocol's change_7d contributes: clamped to
@@ -312,21 +375,24 @@ function breadthFactor(chainCount: number, model: ModelConstants): number {
 
 /** The multipliers and the implied value one protocol gets under `model`. The
  * arithmetic is the model's whole definition: TVL times the category multiple times
- * the growth, maturity and breadth factors, rounded to a whole dollar and never below $1. */
+ * the growth, momentum, maturity and breadth factors, rounded to a whole dollar and
+ * never below $1. */
 export function impliedValue(
   protocol: SnapshotProtocol,
   asOf: string,
   model: ModelConstants,
-  multiples: { byCategory: Map<string, PeerMultiple>; global: number },
-): { implied: number; multiple: number; peers: number; growthPct: number; growthMult: number; maturityMult: number; breadthMult: number; age: number | null } {
+  multiples: Calibration,
+): { implied: number; multiple: number; peers: number; growthPct: number; growthMult: number; momentumPct: number; momentumMult: number; maturityMult: number; breadthMult: number; age: number | null } {
   const age = ageDays(asOf, protocol.listed_at);
   const peer = categoryMultipleFor(protocol.category, multiples);
   const growthPct = clampedGrowth(protocol.change_7d, model);
   const growthMult = growthFactor(protocol.change_7d, model);
+  const momentumPct = momentumFor(protocol.category, multiples);
+  const momentumMult = momentumFactor(momentumPct, model);
   const maturityMult = maturityFactor(age, model);
   const breadthMult = breadthFactor(protocol.chains.length, model);
-  const implied = Math.max(1, Math.round(protocol.tvl_usd * peer.multiple * growthMult * maturityMult * breadthMult));
-  return { implied, multiple: peer.multiple, peers: peer.peers, growthPct, growthMult, maturityMult, breadthMult, age };
+  const implied = Math.max(1, Math.round(protocol.tvl_usd * peer.multiple * growthMult * momentumMult * maturityMult * breadthMult));
+  return { implied, multiple: peer.multiple, peers: peer.peers, growthPct, growthMult, momentumPct, momentumMult, maturityMult, breadthMult, age };
 }
 
 /** DefiLlama's version-marker rule: a name ending in a release is a pool of another
@@ -379,7 +445,7 @@ function scoreProtocol(
   protocol: SnapshotProtocol,
   asOf: string,
   model: ModelConstants,
-  multiples: { byCategory: Map<string, PeerMultiple>; global: number },
+  multiples: Calibration,
 ): { protocol: SnapshotProtocol; value: ReturnType<typeof impliedValue> } {
   return { protocol, value: impliedValue(protocol, asOf, model, multiples) };
 }
@@ -418,6 +484,8 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
       peer_count: s.value.peers,
       growth_pct: s.value.growthPct,
       growth_multiplier: round4(s.value.growthMult),
+      momentum_multiplier: round4(s.value.momentumMult),
+      momentum_pct: s.value.momentumPct,
       maturity_multiplier: round4(s.value.maturityMult),
       breadth_multiplier: round4(s.value.breadthMult),
       age_days: s.value.age,
@@ -567,11 +635,29 @@ function secondActionFor(p: SnapshotProtocol, chain: string): string {
   return template(p.name, 0, chain);
 }
 
+/** The one risk that matters most for this protocol, from its own figures: a
+ * falling week, a thin pool, or a young protocol each get their own warning, so the
+ * plan names the risk instead of a generic caution. */
+function riskFor(p: SnapshotProtocol, age: number | null): string {
+  const change = p.change_7d;
+  if (change !== null && change < -20) {
+    return `TVL fell ${Math.abs(Math.round(change))}% in the last week — check the trend is turning before you add capital, and size the position for a protocol that is shrinking.`;
+  }
+  if (p.tvl_usd < 10_000_000) {
+    return `TVL is under $10M, so the pool is thin — check slippage on a small test exit before you commit the full position.`;
+  }
+  if (age !== null && age < 90) {
+    return `The protocol is under 90 days old — check its points program and its audit status before you commit, and treat the position as experimental.`;
+  }
+  return `Smart-contract risk is real on any protocol — check the protocol's audit and its points page, and never farm with funds you cannot afford to lose.`;
+}
+
 /**
- * A protocol's farm plan: seven steps, each an action with a cost and a time. The plan
- * is derived from the protocol's own record (category, chains, TVL, age), never from a
- * hand-written list of names. Gas is priced on the protocol's own chain, capital on its
- * TVL, the hold on its age.
+ * A protocol's farm plan: eight steps, each an action with a cost and a time. The plan
+ * is derived from the protocol's own record (category, chains, TVL, age, seven-day
+ * change), never from a hand-written list of names. Gas is priced on the protocol's
+ * own chain, capital on its TVL, the hold on its age, and the risk step on the one
+ * risk its own figures name.
  */
 export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const chain = chainOf(p);
@@ -605,6 +691,11 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
       text: `Hold the position for at least ${hold} days so the activity is counted in more than one snapshot.`,
       cost: `the $${capital} stays in the position`,
       time: `${hold} days`,
+    },
+    {
+      text: riskFor(p, age),
+      cost: 'nothing but the check',
+      time: '5 minutes a week',
     },
     {
       text: `Before you withdraw, open the protocol's own points or rewards page and claim only from the link it publishes.`,
@@ -655,6 +746,8 @@ export function radarRow(row: BoardRow): RadarRow {
     category_multiple: row.model.category_multiple,
     peer_count: row.model.peer_count,
     growth_multiplier: row.model.growth_multiplier,
+    momentum_multiplier: row.model.momentum_multiplier,
+    category_momentum: row.model.momentum_pct,
     maturity_multiplier: row.model.maturity_multiplier,
     breadth_multiplier: row.model.breadth_multiplier,
   };
