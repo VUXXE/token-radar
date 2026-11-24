@@ -327,6 +327,7 @@
       else if (key === 'growth') { av = a.change_7d === null ? -Infinity : a.change_7d; bv = b.change_7d === null ? -Infinity : b.change_7d; }
       else if (key === 'age') { av = a.age_days === null ? Infinity : a.age_days; bv = b.age_days === null ? Infinity : b.age_days; }
       else if (key === 'multiple') { av = a.category_multiple; bv = b.category_multiple; }
+      else if (key === 'signal') { av = a.signal_strength; bv = b.signal_strength; }
       else { av = a.implied_value_usd; bv = b.implied_value_usd; }
       if (av < bv) return -view.dir;
       if (av > bv) return view.dir;
@@ -461,8 +462,9 @@
   }
 
   /** One board row: rank, protocol, TVL, seven-day growth, age, peer multiple, the
-   * implied value with its bar, and the token status. A row opens its detail drawer
-   * on click, Enter or Space. */
+   * implied value with its bar, and the signal strength: how much the price can be
+   * trusted, as a meter and a number. A row opens its detail drawer on click, Enter
+   * or Space. */
   function boardRowElement(r, maxImplied) {
     var growth = r.change_7d === null ? 'n/a' : fmtPct(r.change_7d);
     var growthClass = r.change_7d === null ? '' : r.change_7d >= 0 ? 'pos' : 'neg';
@@ -486,7 +488,10 @@
         el('div', { class: 'bar', 'aria-hidden': 'true' }, el('i', { style: 'width:' + Math.max(3, Math.round((r.implied_value_usd / maxImplied) * 100)) + '%' })),
         el('span', { class: 'num', text: fmtUsd(r.implied_value_usd) })
       )),
-      el('td', null, el('span', { class: 'status', text: 'no token' }))
+      el('td', null, el('div', { class: 'signal' },
+        el('div', { class: 'signal-bar', 'aria-hidden': 'true' }, el('i', { style: 'width:' + Math.max(3, r.signal_strength) + '%' })),
+        el('span', { class: 'num', text: String(r.signal_strength) })
+      ))
     );
   }
 
@@ -515,7 +520,7 @@
             sortHeader('age', 'Age'),
             sortHeader('multiple', 'Peer multiple'),
             sortHeader('implied', 'Implied value'),
-            el('th', { scope: 'col', text: 'Token' })
+            sortHeader('signal', 'Signal')
           )),
           tbody
         )
@@ -548,8 +553,9 @@
     );
   }
 
-  /** The model panel: the formula, what each part means, and the eight largest
-   * categories on the board with the multiple each one carries. */
+  /** The model panel: the formula, what each part means, the signal strength, and
+   * a bar chart of the eight largest categories' multiples against the global
+   * median, so the model's signal is seen at a glance instead of read from a table. */
   function modelPanel() {
     var m = dataset.model;
     var byCat = {};
@@ -559,13 +565,15 @@
       byCat[c].rows++;
     });
     var catRows = Object.keys(byCat).sort(function (a, b) { return byCat[b].rows - byCat[a].rows; }).slice(0, 8);
-    var tbody = el('tbody');
+    var maxMult = 0;
+    catRows.forEach(function (c) { if (byCat[c].multiple > maxMult) maxMult = byCat[c].multiple; });
+    var chart = el('div', { class: 'chart' });
     catRows.forEach(function (c) {
-      tbody.appendChild(el('tr', null,
-        el('td', null, el('b', { text: c })),
-        el('td', { class: 'num mult', text: fmtMult(byCat[c].multiple) }),
-        el('td', { class: 'num', text: peersLabel(byCat[c].peers) }),
-        el('td', { class: 'num', text: String(byCat[c].rows) + ' rows' })
+      var above = byCat[c].multiple >= dataset.global_multiple;
+      chart.appendChild(el('div', { class: 'chart-row' },
+        el('span', { class: 'chart-name', text: c }),
+        el('div', { class: 'chart-track' }, el('i', { class: above ? 'above' : 'below', style: 'width:' + Math.max(2, Math.round((byCat[c].multiple / (maxMult || 1)) * 100)) + '%' })),
+        el('span', { class: 'chart-val num', text: fmtMult(byCat[c].multiple) + ' · ' + peersLabel(byCat[c].peers) + ' · ' + byCat[c].rows + ' rows' })
       ));
     });
     return el('section', { class: 'panel model' },
@@ -574,19 +582,53 @@
       el('div', { class: 'formula' },
         'implied = round( tvl_usd x ', el('b', { text: 'category multiple' }), ' x (1 + clamp(change_7d, ' + m.growth_floor + ', ' + m.growth_cap + ') / 100 x ' + m.growth_weight + ') x (1 + clamp(category momentum, ' + m.momentum_floor + ', ' + m.momentum_cap + ') / 100 x ' + m.momentum_weight + ') x (' + m.maturity_floor + ' + min(age_days, ' + m.maturity_days + ') / ' + m.maturity_days + ' x ' + m.maturity_range + ') x (1 + min(chains - 1, ' + m.breadth_max_chains + ') x ' + m.breadth_per_chain + ') )'
       ),
-      el('p', { class: 'sub', text: 'The category multiple is the median market-cap-to-TVL of that category\u2019s live-token peers in this snapshot, shrunk toward the global median so a category with one or two peers cannot set the price, and clamped to ' + m.multiple_min + '\u2013' + m.multiple_max + 'x. The category momentum is the median seven-day change of those same peers, so a category whose traded protocols are holding up scores higher than one whose peers are falling. TVL and seven-day growth come from the snapshot. Age is the time since the protocol was first listed, the best record of how long it has run with no token; an unlisted age uses ' + m.unknown_age_days + ' days. The early radar is every pre-token protocol below the watchlist floor, by TVL, and the live-token protocols are set aside with their market caps shown.' }),
-      el('div', { class: 'table-wrap' },
-        el('table', null,
-          el('caption', { class: 'sub', text: 'The eight largest categories on the board, and the multiple each one carries.' }),
-          el('thead', null, el('tr', null, el('th', { scope: 'col', text: 'Category' }), el('th', { scope: 'col', text: 'Peer multiple' }), el('th', { scope: 'col', text: 'Peers' }), el('th', { scope: 'col', text: 'Board rows' }))),
-          tbody
-        )
-      )
+      el('p', { class: 'sub', text: 'The category multiple is the median market-cap-to-TVL of that category\u2019s live-token peers in this snapshot, shrunk toward the global median so a category with one or two peers cannot set the price, and clamped to ' + m.multiple_min + '\u2013' + m.multiple_max + 'x. The category momentum is the median seven-day change of those same peers, shrunk toward the global momentum by the count of peers that record a change, so a category whose traded protocols are holding up scores higher than one whose peers are falling. TVL and seven-day growth come from the snapshot. Age is the time since the protocol was first listed, the best record of how long it has run with no token; an unlisted age uses ' + m.unknown_age_days + ' days. The early radar is every pre-token protocol below the watchlist floor, by TVL, and the live-token protocols are set aside with their market caps shown.' }),
+      el('p', { class: 'sub', text: 'Signal strength (0\u2013100) scores how much a row\u2019s multiple can be trusted: ' + m.signal_peer_weight + ' points for the live peers that set it, ' + m.signal_agreement_weight + ' for how tightly those peers agree, ' + m.signal_change_weight + ' when the seven-day change is recorded and ' + m.signal_age_weight + ' when the age is known. It never changes the implied value; it says how much the price can be trusted, and the detail view shows the range the peers put on it.' }),
+      el('h3', { text: 'What each category is priced at' }),
+      chart,
+      el('p', { class: 'sub', text: 'The eight largest categories on the board. The global median is ' + fmtMult(dataset.global_multiple) + ': amber bars price above it, the rest below it.' })
     );
   }
 
   var dialog = el('dialog', { class: 'detail', id: 'detail', 'aria-labelledby': 'detail-title' });
   dialog.addEventListener('close', function () { view.selected = null; writeHash(); });
+
+  /** The farm's totals, from the same derivation as the steps: the capital the
+   * position takes, the gas of the setup and the weekly actions over the hold, and
+   * the days to qualify. The setup is three transactions, the second action three
+   * more, the opening two, and one a week for the hold. */
+  function farmSummary(p) {
+    var chain = chainOf(p);
+    var gas = gasFor(chain);
+    var capital = capitalFor(p);
+    var hold = holdDaysFor(p.age_days);
+    var weeks = Math.ceil(hold / 7);
+    return { capital: capital, gas: gas * (8 + weeks), days: hold };
+  }
+
+  /** The signal section of the detail drawer: the score with its meter, what sets
+   * it, and the range the category's peers put on the implied value. A category
+   * with fewer than two live peers has no middle half to quote, and one with none
+   * has no range at all. */
+  function signalSection(row) {
+    var rangeText;
+    if (row.peer_count === 0) {
+      rangeText = 'No live peer sets this category\u2019s price, so the value is the global median and there is no peer range to quote.';
+    } else if (row.peer_count < 2) {
+      rangeText = 'One live peer sets this category\u2019s price, so there is no middle half to quote: the evidence range is the value itself, ' + fmtUsd(row.implied_value_usd) + '.';
+    } else {
+      rangeText = 'The middle half of its ' + row.peer_count + ' live peers price this category at ' + fmtMult(row.low_multiple) + '\u2013' + fmtMult(row.high_multiple) + ' of TVL, so the peers put the implied value at ' + fmtUsd(row.implied_low) + ' to ' + fmtUsd(row.implied_high) + '.';
+    }
+    return el('section', { class: 'detail-section' },
+      el('h3', { text: 'Signal strength' }),
+      el('div', { class: 'signal-big' },
+        el('div', { class: 'signal-bar', 'aria-hidden': 'true' }, el('i', { style: 'width:' + Math.max(3, row.signal_strength) + '%' })),
+        el('b', { class: 'num', text: String(row.signal_strength) + ' / 100' })
+      ),
+      el('p', { class: 'sub', text: 'How much this row\u2019s multiple can be trusted: ' + peersLabel(row.peer_count) + ' set it, and the score also counts how tightly those peers agree and whether the seven-day change and the age are recorded. It never changes the implied value.' }),
+      el('p', { class: 'sub', text: rangeText })
+    );
+  }
 
   /** Open the detail drawer for one protocol: its rank, its model breakdown with the
    * page's own recomputation, and its farm plan. The recomputed number is checked
@@ -623,8 +665,11 @@
       ),
       el('p', { class: 'sub', text: 'Model ' + dataset.model_version + ': the same function scores every protocol. The page recomputes this row as ' + fmtUsd(recomputed) + (recomputed === row.implied_value_usd ? ', the same number board.json carries.' : ', which differs from the board: the data would be stale.') + ' This is an estimate, not a price.' })
     ));
+    dialog.appendChild(signalSection(row));
+    var summary = farmSummary(row);
     dialog.appendChild(el('section', { class: 'detail-section' },
       el('h3', { text: 'Farm plan' }),
+      el('p', { class: 'sub', text: 'Farm summary: $' + summary.capital + ' of capital, about ' + dollars(summary.gas) + ' of gas, over ' + summary.days + ' days to qualify.' }),
       el('ol', { class: 'steps' }, steps.map(function (s) {
         var at = s.indexOf(' Cost: ');
         var action = at >= 0 ? s.slice(0, at) : s;

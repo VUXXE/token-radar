@@ -1,4 +1,4 @@
-// Token Radar's model, version radar-3.
+// Token Radar's model, version radar-4.
 //
 // One snapshot of the protocol universe goes in; one ranked board comes out. The board
 // covers every slug on the snapshot's watchlist, and it adds the early rows the radar
@@ -12,7 +12,7 @@
 // peers: the median market-cap-to-TVL ratio of the protocols in that category that
 // already trade, in the same snapshot. A category with only one or two peers cannot
 // set its own price, so its median is shrunk toward the global median in proportion
-// to its peer count, and the result is clamped to a sane band. Four factors then
+// to its peer count, and the result is clamped to a sane band. Six factors then
 // turn a protocol's TVL into its implied value:
 //
 //   category multiple = shrink(median of the category's live peers, global median)
@@ -21,10 +21,12 @@
 //                       x growth_weight
 //   momentum factor   = 1 + clamp(category momentum, momentum_floor, momentum_cap)
 //                       / 100 x momentum_weight, where the category momentum is the
-//                       median seven-day change of the category's live-token peers:
-//                       a category whose traded protocols are holding up scores
-//                       higher than one whose peers are falling, even when the
-//                       protocol's own week is flat
+//                       median seven-day change of the category's live-token peers,
+//                       shrunk toward the global momentum by the same peer-count
+//                       weight that shrinks the multiple: a category whose traded
+//                       protocols are holding up scores higher than one whose peers
+//                       are falling, even when the protocol's own week is flat, and
+//                       a thin category's momentum is pulled toward the market's
 //   maturity factor   = maturity_floor + min(age_days, maturity_days)
 //                       / maturity_days x maturity_range
 //                       (age_days unknown: unknown_age_days)
@@ -37,6 +39,16 @@
 // market. The farm plan is derived the same way, from the protocol's own record
 // (category, chains, TVL, age): the action, the capital, the hold and every cost
 // and time follow from those figures, never from a list of names.
+//
+// Beside the value, the model states how much the price can be trusted. Signal
+// strength (0..100) scores the evidence behind a row's multiple: how many live
+// peers set it, how tightly those peers agree (the middle half of their ratios
+// against the median), and whether the protocol's own figures are complete. It does
+// not change the implied value; it says how much the value can be trusted. The
+// evidence range is the same idea in dollars: the implied value the row would carry
+// if its category priced at the lower or the upper quartile of its peers instead of
+// their median, so a category whose peers disagree shows a wide range and one whose
+// peers agree shows a narrow one.
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -78,9 +90,13 @@ export interface ModelConstants {
   momentum_weight: number;
   momentum_floor: number;
   momentum_cap: number;
+  signal_peer_weight: number;
+  signal_agreement_weight: number;
+  signal_change_weight: number;
+  signal_age_weight: number;
 }
 
-/** The radar-3 constants: the weights and bands every factor above is built from. */
+/** The radar-4 constants: the weights and bands every factor above is built from. */
 export const MODEL: ModelConstants = {
   growth_weight: 0.5,
   growth_floor: -60,
@@ -97,10 +113,14 @@ export const MODEL: ModelConstants = {
   momentum_weight: 0.3,
   momentum_floor: -30,
   momentum_cap: 30,
+  signal_peer_weight: 40,
+  signal_agreement_weight: 40,
+  signal_change_weight: 10,
+  signal_age_weight: 10,
 };
 
 /** The model's version label: the dashboard names it and the rules quote it. */
-export const MODEL_VERSION = 'radar-3';
+export const MODEL_VERSION = 'radar-4';
 
 /** How many pre-token protocols below the watchlist floor the early radar carries, by
  * TVL. A ceiling, not a target: the board carries fewer when fewer rankable protocols
@@ -143,6 +163,11 @@ export interface BoardRow {
     maturity_multiplier: number;
     breadth_multiplier: number;
     age_days: number | null;
+    signal_strength: number;
+    implied_low: number;
+    implied_high: number;
+    low_multiple: number;
+    high_multiple: number;
   };
   farm_steps: string[];
 }
@@ -167,6 +192,11 @@ export interface RadarRow {
   category_momentum: number;
   maturity_multiplier: number;
   breadth_multiplier: number;
+  signal_strength: number;
+  implied_low: number;
+  implied_high: number;
+  low_multiple: number;
+  high_multiple: number;
 }
 
 /** A live-token protocol: it already trades, so the board shows the market's own
@@ -188,6 +218,7 @@ export interface RadarData {
   floor_usd: number;
   model: ModelConstants;
   model_version: string;
+  global_multiple: number;
   watchlist_size: number;
   board_size: number;
   early_size: number;
@@ -230,10 +261,28 @@ function median(values: number[], fallback: number): number {
   return sorted.length % 2 === 1 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
-/** A category's peer multiple and how many live-token peers set it. */
+/** A quantile of a sorted list, by linear interpolation: the value a quarter or
+ * three quarters of the way through the peers, so the middle half of a category's
+ * ratios has two edges to quote. */
+function quantile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  if (sorted.length === 1) return sorted[0]!;
+  const at = p * (sorted.length - 1);
+  const lo = Math.floor(at);
+  const hi = Math.ceil(at);
+  return sorted[lo]! + (sorted[hi]! - sorted[lo]!) * (at - lo);
+}
+
+/** A category's price and how much it can be trusted: the multiple from its peers'
+ * median, the lower and upper quartile multiples that bound the evidence range,
+ * how tightly the peers agree, and the category's momentum. */
 export interface PeerMultiple {
   multiple: number;
   peers: number;
+  lowMultiple: number;
+  highMultiple: number;
+  agreement: number;
+  momentum: number;
 }
 
 /** Every live-token protocol's market-cap-to-TVL ratio, grouped by category. A
@@ -267,11 +316,9 @@ function clampMultiple(value: number, model: ModelConstants): number {
   return Math.min(model.multiple_max, Math.max(model.multiple_min, value));
 }
 
-/** The median seven-day change of each category's live-token peers, and the median
- * across all of them: a category's momentum is how its traded protocols are moving
- * this week. Only peers that record a change count; a category with no peer change
- * takes the global momentum. */
-function momentumByCategory(protocols: SnapshotProtocol[]): { byCategory: Map<string, number>; global: number } {
+/** The seven-day changes of each category's live-token peers, for the momentum:
+ * only peers that record a change count. */
+function changesByCategory(protocols: SnapshotProtocol[]): Map<string, number[]> {
   const changesByCategory = new Map<string, number[]>();
   for (const protocol of protocols) {
     if (protocol.mcap_usd === null || protocol.mcap_usd <= 0) continue;
@@ -282,57 +329,79 @@ function momentumByCategory(protocols: SnapshotProtocol[]): { byCategory: Map<st
     if (changes === undefined) changesByCategory.set(category, [protocol.change_7d]);
     else changes.push(protocol.change_7d);
   }
-  const allChanges = [...changesByCategory.values()].flat();
-  const global = median(allChanges, 0);
-  const byCategory = new Map<string, number>();
-  for (const [category, changes] of changesByCategory) byCategory.set(category, median(changes, global));
-  return { byCategory, global };
+  return changesByCategory;
 }
 
 /** Everything the model calibrates from the snapshot at run time: each category's
- * multiple and peer count, the global median, and each category's momentum. */
+ * multiple and peer count, the global median, and the global momentum. */
 export interface Calibration {
   byCategory: Map<string, PeerMultiple>;
   global: number;
-  momentumByCategory: Map<string, number>;
   globalMomentum: number;
 }
 
 /**
- * Every category's multiple and momentum, calibrated from the snapshot itself: the
- * median mcap/TVL of its live-token peers, shrunk toward the global median by peer
- * count, clamped to the model's band, and the median seven-day change of those peers.
- * A category with no live peers takes the global median outright. Computed from the
- * snapshot at run time, so a new snapshot re-prices every category on its own market.
+ * Every category's multiple, evidence range, agreement and momentum, calibrated
+ * from the snapshot itself: the median mcap/TVL of its live-token peers, shrunk
+ * toward the global median by peer count and clamped to the model's band, with the
+ * lower and upper quartile multiples shrunk the same way so the evidence range is
+ * the same arithmetic at the quartiles; the agreement is one over one plus the
+ * middle half's width against the median, so peers that price the category alike
+ * score near one and peers that disagree score near zero; the momentum is the median
+ * seven-day change of the category's live-token peers, shrunk toward the global
+ * momentum by the count of peers that record a change. A category with no live
+ * peers takes the global median outright. Computed from the snapshot at run time, so
+ * a new snapshot re-prices every category on its own market.
  */
 export function peerMultiples(protocols: SnapshotProtocol[], model: ModelConstants): Calibration {
   const ratiosByCategory = peerRatiosByCategory(protocols);
   const allRatios = [...ratiosByCategory.values()].flat();
   const global = median(allRatios, model.multiple_min);
+  const changes = changesByCategory(protocols);
+  const allChanges = [...changes.values()].flat();
+  const globalMomentum = median(allChanges, 0);
   const calibrated = new Map<string, PeerMultiple>();
   for (const [category, ratios] of ratiosByCategory) {
-    const shrunk = shrinkToward(median(ratios, global), global, ratios.length, model.shrink_k);
-    calibrated.set(category, { multiple: clampMultiple(shrunk, model), peers: ratios.length });
+    const sorted = [...ratios].sort((a, b) => a - b);
+    const med = median(ratios, global);
+    const q1 = quantile(sorted, 0.25);
+    const q3 = quantile(sorted, 0.75);
+    const n = ratios.length;
+    const multiple = clampMultiple(shrinkToward(med, global, n, model.shrink_k), model);
+    const lowMultiple = clampMultiple(shrinkToward(q1, global, n, model.shrink_k), model);
+    const highMultiple = clampMultiple(shrinkToward(q3, global, n, model.shrink_k), model);
+    const iqrMed = med > 0 ? (q3 - q1) / med : Infinity;
+    const agreement = n < 2 ? 0 : 1 / (1 + iqrMed);
+    const peerChanges = changes.get(category) ?? [];
+    const catMomentum = peerChanges.length > 0 ? median(peerChanges, globalMomentum) : globalMomentum;
+    const momentum = shrinkToward(catMomentum, globalMomentum, peerChanges.length, model.shrink_k);
+    calibrated.set(category, { multiple, peers: n, lowMultiple, highMultiple, agreement, momentum });
   }
-  const momentum = momentumByCategory(protocols);
-  return { byCategory: calibrated, global, momentumByCategory: momentum.byCategory, globalMomentum: momentum.global };
+  return { byCategory: calibrated, global, globalMomentum };
 }
 
-/** A protocol's category multiple and how many peers set it; the global median when
- * its category has no live peers at all. */
+/** A protocol's category price and how much it can be trusted; the global median
+ * and global momentum when its category has no live peers at all, with no agreement
+ * to quote and a range that collapses to the value itself. */
 function categoryMultipleFor(
   category: string | null,
   multiples: Calibration,
 ): PeerMultiple {
   const peer = multiples.byCategory.get(category ?? 'Other');
-  return peer === undefined ? { multiple: multiples.global, peers: 0 } : peer;
+  if (peer !== undefined) return peer;
+  return { multiple: multiples.global, peers: 0, lowMultiple: multiples.global, highMultiple: multiples.global, agreement: 0, momentum: multiples.globalMomentum };
 }
 
-/** A protocol's category momentum, in per cent: the median seven-day change of its
- * category's live-token peers, or the global momentum when the category has none. */
-function momentumFor(category: string | null, calibration: Calibration): number {
-  const momentum = calibration.momentumByCategory.get(category ?? 'Other');
-  return momentum === undefined ? calibration.globalMomentum : momentum;
+/** Signal strength (0..100): how much a row's multiple can be trusted. More live
+ * peers setting the price, tighter agreement among those peers, and complete figures
+ * each add their weight; a category with no live peers scores only on completeness,
+ * because its price is the global median and there is no agreement to quote. */
+function signalStrength(peer: PeerMultiple, change7d: number | null, age: number | null, model: ModelConstants): number {
+  const peerPart = model.signal_peer_weight * (peer.peers / (peer.peers + model.shrink_k));
+  const agreementPart = model.signal_agreement_weight * peer.agreement;
+  const changePart = change7d !== null && Number.isFinite(change7d) ? model.signal_change_weight : 0;
+  const agePart = age !== null ? model.signal_age_weight : 0;
+  return Math.round(peerPart + agreementPart + changePart + agePart);
 }
 
 /** The momentum factor: 1 plus the clamped category momentum times the model's
@@ -376,23 +445,29 @@ function breadthFactor(chainCount: number, model: ModelConstants): number {
 /** The multipliers and the implied value one protocol gets under `model`. The
  * arithmetic is the model's whole definition: TVL times the category multiple times
  * the growth, momentum, maturity and breadth factors, rounded to a whole dollar and
- * never below $1. */
+ * never below $1. The evidence range is the same arithmetic at the category's lower
+ * and upper quartile multiples, and the signal strength scores the evidence behind
+ * the multiple. */
 export function impliedValue(
   protocol: SnapshotProtocol,
   asOf: string,
   model: ModelConstants,
   multiples: Calibration,
-): { implied: number; multiple: number; peers: number; growthPct: number; growthMult: number; momentumPct: number; momentumMult: number; maturityMult: number; breadthMult: number; age: number | null } {
+): { implied: number; multiple: number; peers: number; growthPct: number; growthMult: number; momentumPct: number; momentumMult: number; maturityMult: number; breadthMult: number; age: number | null; signal: number; bandLow: number; bandHigh: number; lowMultiple: number; highMultiple: number } {
   const age = ageDays(asOf, protocol.listed_at);
   const peer = categoryMultipleFor(protocol.category, multiples);
   const growthPct = clampedGrowth(protocol.change_7d, model);
   const growthMult = growthFactor(protocol.change_7d, model);
-  const momentumPct = momentumFor(protocol.category, multiples);
+  const momentumPct = peer.momentum;
   const momentumMult = momentumFactor(momentumPct, model);
   const maturityMult = maturityFactor(age, model);
   const breadthMult = breadthFactor(protocol.chains.length, model);
-  const implied = Math.max(1, Math.round(protocol.tvl_usd * peer.multiple * growthMult * momentumMult * maturityMult * breadthMult));
-  return { implied, multiple: peer.multiple, peers: peer.peers, growthPct, growthMult, momentumPct, momentumMult, maturityMult, breadthMult, age };
+  const factors = growthMult * momentumMult * maturityMult * breadthMult;
+  const implied = Math.max(1, Math.round(protocol.tvl_usd * peer.multiple * factors));
+  const bandLow = Math.max(1, Math.round(protocol.tvl_usd * peer.lowMultiple * factors));
+  const bandHigh = Math.max(implied, Math.round(protocol.tvl_usd * peer.highMultiple * factors));
+  const signal = signalStrength(peer, protocol.change_7d, age, model);
+  return { implied, multiple: peer.multiple, peers: peer.peers, growthPct, growthMult, momentumPct, momentumMult, maturityMult, breadthMult, age, signal, bandLow, bandHigh, lowMultiple: peer.lowMultiple, highMultiple: peer.highMultiple };
 }
 
 /** DefiLlama's version-marker rule: a name ending in a release is a pool of another
@@ -489,6 +564,11 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
       maturity_multiplier: round4(s.value.maturityMult),
       breadth_multiplier: round4(s.value.breadthMult),
       age_days: s.value.age,
+      signal_strength: s.value.signal,
+      implied_low: s.value.bandLow,
+      implied_high: s.value.bandHigh,
+      low_multiple: s.value.lowMultiple,
+      high_multiple: s.value.highMultiple,
     },
     farm_steps: farmSteps(s.protocol, s.value.age).map(stepText),
   }));
@@ -750,6 +830,11 @@ export function radarRow(row: BoardRow): RadarRow {
     category_momentum: row.model.momentum_pct,
     maturity_multiplier: row.model.maturity_multiplier,
     breadth_multiplier: row.model.breadth_multiplier,
+    signal_strength: row.model.signal_strength,
+    implied_low: row.model.implied_low,
+    implied_high: row.model.implied_high,
+    low_multiple: row.model.low_multiple,
+    high_multiple: row.model.high_multiple,
   };
 }
 
@@ -766,6 +851,7 @@ export function buildRadar(snapshot: Snapshot, model: ModelConstants = MODEL): {
     floor_usd: snapshot.floor_usd,
     model,
     model_version: MODEL_VERSION,
+    global_multiple: peerMultiples(snapshot.protocols, model).global,
     watchlist_size: snapshot.watchlist.length,
     board_size: board.length,
     early_size: early,

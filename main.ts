@@ -2,7 +2,7 @@
 //
 // The run has five steps, in order. First it finds the sealed snapshot, at
 // /input/snapshot.json or wherever --input points. Then it scores every pre-token
-// protocol with the radar-3 model in lib/model.ts and refuses a board the gate would
+// protocol with the radar-4 model in lib/model.ts and refuses a board the gate would
 // refuse, with the reason named. Then it writes the board to /output/board.json and
 // the dashboard's dataset to /output/data.js. Then it copies this repository's
 // dashboard/ and screenshots/ to /output, checking the screenshots are present and

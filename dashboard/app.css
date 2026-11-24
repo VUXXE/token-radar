@@ -173,6 +173,15 @@ tbody tr.top3 td:first-child { border-left: 3px solid var(--accent); }
 .bar { width: 110px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--accent); }
 .implied { display: flex; align-items: center; gap: var(--step-2); }
+
+/* The signal meter: a short bar and a number, teal because it is a strength, not
+   a value. The drawer shows the same meter larger, beside the score. */
+.signal { display: flex; align-items: center; gap: var(--step-2); }
+.signal-bar { width: 64px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.signal-bar i { display: block; height: 100%; background: var(--growth); }
+.signal-big { display: flex; align-items: center; gap: var(--step-3); margin-bottom: var(--step-2); }
+.signal-big .signal-bar { width: 170px; height: 8px; }
+.signal-big b { font-size: 16px; }
 .status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
 .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
 .status.live::before { background: var(--growth); }
@@ -185,6 +194,18 @@ tbody tr.top3 td:first-child { border-left: 3px solid var(--accent); }
 .formula b { color: var(--accent); font-weight: 600; }
 .model table { font-size: 13px; }
 .model th, .model td { padding: var(--step-2) var(--step-3); }
+
+/* The category chart: one row per category, a bar whose length is the multiple,
+   amber when the category prices above the global median and muted when it prices
+   below it, so the model's signal reads as a shape, not a column of numbers. */
+.chart { display: grid; gap: var(--step-2); }
+.chart-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 230px; align-items: center; gap: var(--step-3); }
+.chart-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chart-track { height: 10px; border-radius: 5px; background: var(--border); overflow: hidden; }
+.chart-track i { display: block; height: 100%; }
+.chart-track i.above { background: var(--accent); }
+.chart-track i.below { background: var(--muted); }
+.chart-val { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .empty { padding: var(--step-7) var(--step-5); text-align: center; display: grid; gap: var(--step-3); justify-items: center; }
 .empty p { color: var(--muted); }
 .button { min-height: 36px; padding: 0 var(--step-4); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); }
