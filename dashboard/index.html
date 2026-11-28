@@ -3,17 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Token Radar: pre-token protocols ranked by implied value</title>
+<title>Token Radar — Empirical Launch &amp; Farm Desk</title>
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<a class="skip" href="#board">Skip to the board</a>
-<!-- The page is static: data.js, written beside dashboard/ by main.ts, carries the whole dataset
-     and app.js renders it. No fetch, no network. -->
-<main id="board" tabindex="-1" aria-busy="true"></main>
-<!-- Scripts load in order: data.js first, so window.RADAR exists before app.js
-     renders the board from it. Both are local files; nothing is fetched. -->
+<a class="skip" href="#app">Skip to board</a>
+<main id="app" tabindex="-1" aria-busy="true"></main>
 <script src="../data.js"></script>
+<script src="engine.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
+

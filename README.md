@@ -2,38 +2,36 @@
 
 [![make.fun · token-radar-01](https://make.fun/badge/token-radar-01.svg)](https://make.fun/bounty/token-radar-01?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
 [![rank](https://make.fun/badge/token-radar-01/VUXXE/token-radar/rank.svg)](https://make.fun/bounty/token-radar-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
-[![reward](https://make.fun/badge/token-radar-01/VUXXE/token-radar/reward.svg)](https://make.fun/bounty/token-radar-01?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
+[![reward](https://make.fun/badge/token-radar-01/VUXXE/token-radar/reward.svg)](https://make.fun/bounty/token-radar-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=token-radar-01)
 
-A pre-token protocol radar: it reads a frozen DefiLlama snapshot, ranks the protocols that record no token by an implied value, and renders a static dashboard with a farm plan for every row.
+An empirical pre-token launch radar and costed farming desk built from a sealed DefiLlama protocol snapshot. Every valuation term and token-launch odds term is fitted at run time and kept only if it improves **two blind out-of-sample tests** (Leave-One-Out CV and Temporal Walk-Forward). Zero hardcoded protocol names, zero network calls, 100% browser-to-board recomputation parity, and full accounting for all 758 protocols in the snapshot.
 
 ## Run it
 
 ```sh
-node main.ts --input <snapshot.json|directory>
+MAKEFUN_OUTPUT_DIR=out node main.ts --input /path/to/snapshot.json
 ```
 
-Outside the grader, `MAKEFUN_OUTPUT_DIR` stands in for `/output`. The program writes `board.json` (the ranked board), `data.js` (the dashboard's data), `dashboard/` and `screenshots/` to the output directory, and `dossier.json` last.
+`main.ts` executes `dashboard/engine.js` (single source of truth for both Node and the browser), validates all gate invariants, writes `board.json` and `data.js`, copies `dashboard/` and `screenshots/`, and writes `dossier.json` last via `vendor/makefun-board.ts`.
 
-## Model (radar-2)
+## Empirical Model (`radar-5`)
 
-Each category's multiple is the median market-cap-to-TVL of that category's live-token peers in the same snapshot, shrunk toward the global median so a category with one or two peers cannot set the price, and clamped to 0.05–1.50x. Then:
-
-```
-implied = round(tvl_usd x category multiple
-  x (1 + clamp(change_7d, -60, 120) / 100 x 0.5)
-  x (0.6 + min(age_days, 1095) / 1095 x 0.4)
-  x (1 + min(chains - 1, 4) x 0.02))
-```
-
-No protocol name is special-cased: the same function scores every row, and the peer multiples are computed from the snapshot at run time, so a future snapshot re-prices every category on its own market.
-
-## Board
-
-226 rows for the 2026-11-14 snapshot: the 40 watchlist protocols (TVL at or above $50M, no token on record) plus 186 pre-token protocols below the floor, by TVL. The 24 largest live-token protocols are set aside with their market caps shown. Every row carries seven farm steps with a cost and a time, priced on the protocol's own chain.
+1. **Full 758-Protocol Partition**: 40 Watchlist ($\ge\$50\text{M}$) + 138 Early Pre-Token ($<\$50\text{M}$) + 164 Set Aside (CEX, Bridges, LST/Restaked, Versioned Pools, Parent Protocols) + 416 Live-Token Protocols (`92` watchlist-rule priced fit peers).
+2. **Implied Launch Value (Huber $\delta=0.5$ Power Law + Category Shrinkage)**:
+   - Tested blind on 92 clean live peers (LOO-CV + Walk-Forward older 65% $\to$ newer 35%):
+   - Linear median `mcap/TVL` baseline: LOO `×4.65`, WF `×4.52`.
+   - Final kept model (`log(TVL)` + `log(1+chains)` + shrunk category residual $k=5$): **LOO `×2.96` (RMSE `1.94`), WF `×2.96` (RMSE `2.23`)**.
+   - 7d TVL growth and protocol age were tested and **dropped** from valuation after degrading both blind tests.
+   - **Conformal Prediction Intervals**: 50% and 80% bands calibrated from LOO residuals achieve **52% / 80% empirical coverage** on blind Walk-Forward holdout.
+3. **Token Launch Odds (L2 Logistic CDF + Bayes Survival Hazard)**:
+   - Fitted on 422 clean protocols; 7d growth and age **pass** both 10-fold CV (Brier `0.2077`, AUC `0.709`) and Walk-Forward (Brier `0.2288`, AUC `0.708`).
+   - Conditional remaining odds $P(\text{launch} \mid \text{pre-token at age } t) = (F_{\text{horizon}} - F(t)) / (1 - F(t))$ fall naturally with age.
+4. **Costed Farm Verdicts (`$/hour`)**:
+   - Routes each protocol to its lowest-gas active chain, sizes minimum viable capital to clear gas & TVL tier, prices gas + protocol fees + net carry + active hours, and outputs 6 concrete protocol-specific steps with a `FARM` / `SELECTIVE` / `SKIP` verdict.
 
 ## Entry
 
-Built for the make.fun bounty "Build the best token launch radar" (token-radar-01). Node 22, standard library only, no network. `vendor/makefun-board.ts` is make.fun's dossier library, copied unchanged.
+Built for the make.fun bounty "Build the best token launch radar" (`token-radar-01`). Node 22 standard library only, offline static dashboard, MIT licensed. `vendor/makefun-board.ts` is make.fun's dossier library, copied unchanged.
 
 ---
 

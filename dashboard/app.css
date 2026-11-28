@@ -1,250 +1,66 @@
-/* Token Radar's chart-room theme. A radar scope on deep sonar navy, with a warm
-   amber signal: the palette of a chart room at night, not a generic dark template.
-   The amber is the signal (implied value, the strongest contact); teal marks growth
-   and rose marks decline, so colour always means something. The headline and the
-   protocol names are set in a serif, like a logbook entry, against a clean sans for
-   the working text; numbers stay tabular monospace because they are data. */
-:root {
-  --canvas: #0d1b2a;
-  --surface: #132539;
-  --surface-2: #1a3249;
-  --ink: #eef2f5;
-  --muted: #8ba3b8;
-  --border: #24394f;
-  --accent: #f2a93b;
-  --accent-deep: #b97a1e;
-  --accent-soft: #f6c97a;
-  --growth: #5ec8a5;
-  --negative: #e07856;
-  --radius-control: 8px;
-  --radius-panel: 14px;
-  --font-display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --font-body: system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-num: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --step-1: 4px;
-  --step-2: 8px;
-  --step-3: 12px;
-  --step-4: 16px;
-  --step-5: 24px;
-  --step-6: 32px;
-  --step-7: 48px;
-}
+/* Token Radar — Quantitative Broadsheet Editorial Theme. */
+:root{--bg:#f5f2eb;--paper:#fff;--alt:#faf8f4;--ink:#141a21;--ink2:#3b4754;--mut:#5d6b79;--r:#ded9ce;--rs:#c6bfb0;--cb:#1b4d89;--cbs:#e8f0fa;--em:#0f6b4b;--ems:#e4f4ed;--oc:#9c5d0c;--ocs:#fdf2e0;--tr:#b03a24;--trs:#fbeae6;--sf:"Iowan Old Style",Palatino,Georgia,serif;--sn:system-ui,-apple-system,"Segoe UI",sans-serif;--mn:ui-monospace,"SF Mono",Menlo,monospace}
+*{box-sizing:border-box}html{color-scheme:light}body{margin:0;background:var(--bg);color:var(--ink);font:400 13.5px/1.45 var(--sn);-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;font-family:var(--sf);letter-spacing:-.015em}p{margin:0}button,input,select{font:inherit;color:inherit}button{cursor:pointer}
+.skip{position:absolute;left:-9999px;top:0;padding:6px 12px;background:var(--paper);border:1px solid var(--cb);z-index:30}.skip:focus{left:12px;top:12px}:focus-visible{outline:2px solid var(--cb);outline-offset:2px}
+.shell{max-width:1400px;margin:0 auto;padding:14px 20px 26px}
+.masthead,.card-head,.nav-row,.filter-banner,.val-top,.d-head,.eq-row,.step-top,.chart-foot{display:flex;justify-content:space-between}
+.masthead{align-items:center;gap:16px;padding-bottom:10px;border-bottom:2px solid var(--ink)}
+.brand,.meta-pills,.tabs,.quick-pills,.controls,.d-title-row,.farm-top,.proto-name{display:flex;align-items:center}
+.brand{gap:10px}.brand-mark{width:30px;height:30px;flex:none}.brand-title{font:700 22px/1.05 var(--sf)}.brand-sub,.d-sub{font-size:12px;color:var(--mut)}
+.meta-pills{flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.meta-pill,.kpi-val,.kpi-sub,.card-head span,.chk b,.tab .cnt,.row-summary,.filter-banner b,.num,.rank-cell,.tag,.val-main,.val-band,.farm-phr,.farm-meta,.formula-box,.eq-list,.parity-pill,.verdict-big,.econ-item b,.step-num,.step-meta{font-family:var(--mn)}
+.meta-pill{font-size:11px;color:var(--ink2);background:var(--paper);border:1px solid var(--r);border-radius:4px;padding:3px 8px}.meta-pill b,.chk b,.row-summary b{color:var(--ink);font-weight:600}
+.integrity{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:7px 12px;margin-top:8px;background:var(--paper);border:1px solid var(--r);border-left:3px solid var(--em);border-radius:6px;font-size:11.5px;color:var(--ink2)}
+.chk{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}.chk-dot{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:var(--ems);color:var(--em);font:700 10px/1 var(--sn)}
+.overview{display:grid;grid-template-columns:1.05fr 1.25fr .95fr;gap:12px;margin-top:10px}
+.card,.panel,.meth-card{background:var(--paper);border:1px solid var(--r);border-radius:10px}.card{padding:11px 14px;min-width:0}.panel{overflow:hidden}.meth-card{padding:13px 15px}
+.card-head{align-items:baseline;gap:8px;margin-bottom:8px}.card-head h2,.d-box h3{font:700 11px/1.2 var(--sn);text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}.card-head span{font-size:11px;color:var(--cb);font-weight:600}
+.kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.kpi{background:var(--alt);border:1px solid var(--r);border-radius:6px;padding:7px 9px}
+.kpi-label{font-size:11px;color:var(--mut);display:block}.kpi-val{font-size:17px;font-weight:700;line-height:1.2}.kpi-val.good,.pos{color:var(--em)}.kpi-sub{font-size:10.5px;color:var(--mut)}
+.svg-box{width:100%;height:118px;display:block}.chart-foot{font-size:11px;color:var(--mut);margin-top:3px;gap:8px}
+.nav-row{flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px;padding-bottom:8px;border-bottom:1px solid var(--r)}.tabs,.quick-pills{flex-wrap:wrap;gap:5px}
+.tab{border:1px solid var(--r);background:var(--alt);color:var(--ink2);padding:6px 12px;border-radius:6px;font-size:12.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.tab .cnt{font-size:11px;padding:1px 5px;border-radius:99px;background:var(--bg);color:var(--mut)}.tab[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}.tab[aria-pressed="true"] .cnt{background:rgba(255,255,255,.18);color:#fff}
+.pill{border:1px solid var(--r);background:var(--paper);color:var(--ink2);padding:4px 10px;border-radius:999px;font-size:11.5px;font-weight:600}.pill[aria-pressed="true"]{background:var(--cbs);border-color:var(--cb);color:var(--cb)}.pill.farm[aria-pressed="true"]{background:var(--ems);border-color:var(--em);color:var(--em)}
+.controls{flex-wrap:wrap;gap:8px;margin:8px 0}.controls input,.controls select,.btn-reset{height:31px;padding:0 9px;border:1px solid var(--rs);border-radius:6px;background:var(--paper);font-size:12.5px}
+.controls input{min-width:220px;flex:1 1 220px;max-width:320px}.controls select{min-width:138px}.btn-reset{background:var(--alt);font-size:12px;font-weight:600;color:var(--ink2)}
+.row-summary{margin-left:auto;font-size:11.5px;color:var(--mut)}.filter-banner{flex-wrap:wrap;align-items:center;gap:10px;padding:7px 12px;margin-bottom:8px;background:var(--cbs);border:1px solid #bfd4ec;border-radius:6px;font-size:12px;color:var(--cb)}
+.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{background:var(--alt);border-bottom:1px solid var(--rs);padding:7px 10px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);white-space:nowrap}
+th button{border:0;background:none;padding:0;font:inherit;color:inherit;text-transform:inherit;letter-spacing:inherit;display:inline-flex;align-items:center;gap:4px}th button:hover,th button.active{color:var(--ink)}
+tbody td{padding:7px 10px;border-bottom:1px solid var(--r);vertical-align:middle}tbody tr:last-child td{border-bottom:0}
+tbody tr.clickable{cursor:pointer}tbody tr.clickable:hover{background:#f4f7fb}tbody tr[data-selected="true"]{background:var(--cbs)}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}.rank-cell{font-weight:700;color:var(--ink2);width:42px}.rank-top{color:var(--cb)}
+.proto-name{gap:6px;font:700 13.5px/1.3 var(--sf)}.proto-sub{font-size:11px;color:var(--mut);margin-top:1px}
+.tag{display:inline-block;font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:3px;letter-spacing:.03em}
+.tag-wl{background:var(--cbs);color:var(--cb);border:1px solid #c3d8f0}.tag-ea,.tag-sel{background:var(--ocs);color:var(--oc);border:1px solid #efd6ad}
+.tag-farm{background:var(--ems);color:var(--em);border:1px solid #b5e0ce}.tag-skip{background:var(--trs);color:var(--tr);border:1px solid #ecc6be}
+.tag-kept{background:var(--ems);color:var(--em)}.tag-drop{background:var(--trs);color:var(--tr)}.tag-base{background:var(--bg);color:var(--mut)}
+.pos,.neg{font-weight:600}.neg{color:var(--tr)}
+.val-cell,.farm-cell{min-width:175px}.val-top{align-items:baseline;gap:6px}.val-main{font-weight:700;font-size:13px}.val-band{font-size:10px;color:var(--mut)}
+.band-track,.odds-track{position:relative;height:5px;background:var(--bg);border-radius:3px;margin-top:3px;overflow:hidden}
+.band-range{position:absolute;top:0;bottom:0;background:#bfd4ec;border-radius:3px}.band-pt{position:absolute;top:-1px;bottom:-1px;width:3px;background:var(--cb);border-radius:2px}
+.odds-cell{min-width:82px}.odds-track{width:64px}.odds-fill{display:block;height:100%;background:var(--em);border-radius:3px}
+.farm-top{gap:6px}.farm-phr{font-weight:700;font-size:12.5px}.farm-meta{font-size:10.5px;color:var(--mut);margin-top:1px}
+.meth-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}.meth-card h3{font-size:15px;margin-bottom:4px}.meth-lead{font-size:12px;color:var(--mut);margin-bottom:9px}
+.meth-table{width:100%;border-collapse:collapse;font-size:11.5px}.meth-table th{background:var(--alt);padding:5px 7px;border-bottom:1px solid var(--rs);font-size:10px;text-transform:uppercase;color:var(--mut)}.meth-table td{padding:5px 7px;border-bottom:1px solid var(--r)}.meth-table tr.winner td{background:var(--ems);font-weight:600}
+.formula-box{font-size:11.2px;line-height:1.55;white-space:pre-wrap;background:var(--alt);border:1px solid var(--r);border-radius:6px;padding:8px 10px;margin-bottom:10px}
+.lane-bars{display:grid;gap:7px;margin-top:6px}.lane-row{display:grid;grid-template-columns:196px 1fr 118px;align-items:center;gap:8px;font-size:12px}
+.lane-track{height:10px;background:var(--bg);border-radius:5px;overflow:hidden}.lane-track i{display:block;height:100%;border-radius:5px}
+dialog.detail{position:fixed;top:14px;right:14px;bottom:14px;left:auto;width:min(950px,95vw);max-height:calc(100vh - 28px);margin:0;background:var(--paper);color:var(--ink);border:1px solid var(--rs);border-radius:12px;padding:16px 20px;overflow-y:auto;box-shadow:0 20px 50px rgba(20,26,33,.22)}
+dialog.detail::backdrop{background:rgba(20,26,33,.48)}
+.d-head{align-items:flex-start;gap:14px;padding-bottom:10px;border-bottom:2px solid var(--ink)}.d-title-row{flex-wrap:wrap;gap:8px}.d-head h2{font-size:22px;line-height:1.1}.d-sub{margin-top:3px}
+.d-close{border:1px solid var(--rs);background:var(--alt);border-radius:6px;padding:5px 11px;font-size:12px;font-weight:600}
+.d-grid{display:grid;grid-template-columns:.96fr 1.04fr;gap:16px;margin-top:12px}.d-col{display:grid;gap:10px;align-content:start}
+.d-box{background:var(--alt);border:1px solid var(--r);border-radius:10px;padding:10px 12px}.d-box h3{margin-bottom:6px}
+.eq-list{display:grid;gap:4px;font-size:11.5px}.eq-row{gap:8px}.eq-row span{color:var(--mut)}.eq-row.total{border-top:1px solid var(--rs);padding-top:5px;margin-top:3px;font-weight:700;font-size:12.5px}
+.parity-pill{margin-top:6px;padding:4px 8px;border-radius:4px;font-size:10.5px;background:var(--ems);color:var(--em);font-weight:600}
+.comps-table{width:100%;border-collapse:collapse;font-size:11px;margin-top:4px}.comps-table th,.comps-table td{padding:4px 5px;border-bottom:1px solid var(--r)}.comps-table th{color:var(--mut);font-size:10px;text-transform:uppercase}
+.verdict-hero{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;padding:9px 11px;border-radius:6px;border:1px solid var(--r);background:var(--paper);margin-bottom:8px}.verdict-big{font-size:20px;font-weight:700;line-height:1.1}
+.econ-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}.econ-item{background:var(--paper);border:1px solid var(--r);border-radius:5px;padding:5px 7px}.econ-item span{display:block;font-size:10px;color:var(--mut)}.econ-item b{font-size:12px}
+.step-list{margin:0;padding:0;list-style:none;display:grid;gap:6px}.step-item{background:var(--paper);border:1px solid var(--r);border-radius:6px;padding:7px 9px}
+.step-top{gap:8px;align-items:baseline;margin-bottom:2px}.step-num{font-size:10.5px;font-weight:700;color:var(--cb)}.step-meta{font-size:10px;color:var(--mut);white-space:nowrap}.step-body{font-size:11.5px;color:var(--ink2);line-height:1.38}
+.empty{padding:36px 20px;text-align:center;color:var(--mut)}.empty h3{font-size:18px;color:var(--ink);margin-bottom:6px}
+@media(max-width:1020px){.overview,.meth-grid,.d-grid{grid-template-columns:1fr}}
 
-* { box-sizing: border-box; }
-html { color-scheme: dark; }
-body {
-  margin: 0;
-  background: var(--canvas);
-  color: var(--ink);
-  font: 400 15px/1.55 var(--font-body);
-  text-wrap: pretty;
-}
-h1, h2, h3 { margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
-h1 { font-family: var(--font-display); font-size: 34px; line-height: 1.12; font-weight: 600; }
-h2 { font-size: 20px; line-height: 1.2; font-weight: 650; }
-h3 { font-size: 16px; line-height: 1.25; font-weight: 650; }
-p { margin: 0; }
-button, input, select { font: inherit; color: inherit; }
-button { cursor: pointer; }
-a { color: var(--accent); }
-.skip {
-  position: absolute; left: -9999px; top: 0; padding: var(--step-2) var(--step-4);
-  background: var(--surface); border: 1px solid var(--border); z-index: 20;
-}
-.skip:focus { left: var(--step-4); top: var(--step-4); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* The page shell: one centred column, wide enough for the board's eight columns,
-   with the header, the lede and the tables stacked inside it. */
-.shell { max-width: 1320px; margin: 0 auto; padding: var(--step-5) var(--step-6) var(--step-7); }
-.top {
-  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--step-5);
-  padding-bottom: var(--step-4); border-bottom: 1px solid var(--border);
-}
-.brand { display: flex; align-items: center; gap: var(--step-3); }
-.mark {
-  width: 26px; height: 26px; border-radius: 50%; flex: none; position: relative;
-  border: 1px solid var(--accent-deep);
-  background:
-    radial-gradient(circle, transparent 34%, var(--border) 35%, transparent 36%),
-    radial-gradient(circle, transparent 64%, var(--border) 65%, transparent 66%),
-    conic-gradient(from 200deg, var(--accent) 0deg, transparent 70deg, transparent 360deg);
-}
-.mark::after {
-  content: ""; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px;
-  margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: var(--accent);
-}
-.brand-name { font-family: var(--font-display); font-size: 21px; font-weight: 600; color: var(--ink); }
-.top-meta { display: flex; flex-wrap: wrap; gap: var(--step-3); justify-content: flex-end; color: var(--muted); font-size: 13px; }
-.top-meta span { white-space: nowrap; }
-.top-meta b { color: var(--ink); font-weight: 600; }
-
-/* The lede: the headline and the explanation on the left, the radar scope on the
-   right, so the strongest signals are seen as contacts on a scope before the table. */
-.lede { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr); gap: var(--step-6); padding: var(--step-6) 0 var(--step-5); }
-.lede p { color: var(--muted); max-width: 62ch; margin-top: var(--step-2); }
-.lede p b { color: var(--ink); font-weight: 600; }
-.lede .kicker { font-family: var(--font-display); font-style: italic; color: var(--accent-soft); font-size: 15px; }
-
-/* The radar scope: a circular dial with three range rings and a sweep, the top five
-   protocols as amber contacts. Radius is the log of implied value, so the strongest
-   contact sits nearest the centre; angle spreads by rank so no two contacts overlap. */
-.scope { display: flex; align-items: center; gap: var(--step-5); }
-.scope-dial {
-  width: 190px; height: 190px; border-radius: 50%; flex: none; position: relative;
-  border: 1px solid var(--border);
-  background:
-    radial-gradient(circle, transparent 32%, var(--border) 33%, transparent 34%),
-    radial-gradient(circle, transparent 65%, var(--border) 66%, transparent 67%),
-    conic-gradient(from 210deg, rgba(242, 169, 59, 0.28) 0deg, transparent 80deg, transparent 360deg);
-}
-.scope-dial::before, .scope-dial::after {
-  content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border);
-}
-.scope-dial::after { left: 0; right: 0; top: 50%; bottom: auto; width: auto; height: 1px; }
-.blip {
-  position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%;
-  background: var(--accent); color: var(--canvas); font: 600 11px/22px var(--font-num);
-  text-align: center; box-shadow: 0 0 0 3px rgba(242, 169, 59, 0.22);
-}
-.blip.first { width: 28px; height: 28px; margin: -14px 0 0 -14px; font-size: 13px; line-height: 28px; box-shadow: 0 0 0 5px rgba(242, 169, 59, 0.25), 0 0 18px rgba(242, 169, 59, 0.45); }
-.scope-side { min-width: 0; display: grid; gap: var(--step-1); align-content: center; }
-.scope-side .label { color: var(--muted); font-size: 13px; }
-.scope-side .strong { font-family: var(--font-display); font-size: 22px; line-height: 1.2; font-weight: 600; }
-.scope-side .strong-value { font-family: var(--font-num); font-size: 20px; color: var(--accent); font-weight: 600; }
-.scope-side .note { color: var(--muted); font-size: 13px; }
-
-/* The signal strip: the four facts as one horizontal row under the lede, so the
-   board's scale reads in a line instead of a column. */
-.facts { display: flex; flex-wrap: wrap; gap: var(--step-3) var(--step-6); padding: var(--step-3) 0 var(--step-5); border-top: 1px solid var(--border); }
-.fact { display: flex; align-items: baseline; gap: var(--step-2); }
-.fact b { font-family: var(--font-num); font-size: 15px; font-weight: 600; color: var(--accent-soft); }
-.fact span { color: var(--muted); font-size: 13px; }
-
-/* The top-ten chips: one pill per top row, rank and implied value side by side,
-   each opening that protocol's detail drawer. The rank is amber, the signal colour. */
-.top10 { display: flex; flex-wrap: wrap; gap: var(--step-2); padding: 0 0 var(--step-5); }
-.chip {
-  display: inline-flex; align-items: baseline; gap: var(--step-2);
-  padding: var(--step-1) var(--step-3); border: 1px solid var(--border); border-radius: 999px;
-  background: var(--surface); font-size: 13px; color: var(--muted); cursor: pointer;
-}
-.chip b { color: var(--ink); font-weight: 600; }
-.chip .num { font-family: var(--font-num); color: var(--accent); }
-.chip:hover { border-color: var(--accent-deep); }
-
-/* The filter controls: search, the two dropdowns and the token-status tabs in one
-   row, with the count of rows shown pushed to the right. */
-.controls { display: flex; flex-wrap: wrap; align-items: end; gap: var(--step-3); padding: var(--step-4) 0; border-top: 1px solid var(--border); }
-.field { display: grid; gap: var(--step-1); }
-.field label { color: var(--muted); font-size: 12px; }
-.field input, .field select {
-  min-height: 36px; padding: 0 var(--step-3); border: 1px solid var(--border); border-radius: var(--radius-control);
-  background: var(--surface); min-width: 170px;
-}
-.field input { min-width: 260px; }
-.tabs { display: flex; gap: var(--step-1); padding: 3px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); }
-.tabs button { min-height: 30px; padding: 0 var(--step-3); border: 0; border-radius: 6px; background: transparent; color: var(--muted); }
-.tabs button[aria-pressed="true"] { background: var(--accent); color: var(--canvas); font-weight: 600; }
-.count { margin-left: auto; color: var(--muted); font-size: 13px; align-self: center; }
-
-/* The board table: one panel with a hairline between rows, a hovered row lifting
-   to the second surface, and the selected row held in amber. Numbers are tabular so
-   the columns do not jitter as values change. The top three ranks carry an amber
-   left edge, so the strongest contacts are visible even when the table is scrolled. */
-.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: hidden; }
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { padding: var(--step-3) var(--step-3); border-bottom: 1px solid var(--border); text-align: left; vertical-align: middle; }
-tbody tr:last-child td { border-bottom: 0; }
-th { color: var(--muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
-th button { display: inline-flex; align-items: center; gap: var(--step-1); border: 0; background: none; padding: 0; color: inherit; font: inherit; }
-th button:hover { color: var(--ink); }
-tbody tr { cursor: pointer; }
-tbody tr:hover { background: var(--surface-2); }
-tbody tr[data-selected="true"] { background: #2a2113; }
-tbody tr.top3 td:first-child { border-left: 3px solid var(--accent); }
-.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.name { display: grid; gap: 2px; }
-.name b { font-family: var(--font-display); font-size: 15px; font-weight: 600; }
-.sub { color: var(--muted); font-size: 12px; }
-.pos { color: var(--growth); }
-.neg { color: var(--negative); }
-.bar { width: 110px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--accent); }
-.implied { display: flex; align-items: center; gap: var(--step-2); }
-
-/* The signal meter: a short bar and a number, teal because it is a strength, not
-   a value. The drawer shows the same meter larger, beside the score. */
-.signal { display: flex; align-items: center; gap: var(--step-2); }
-.signal-bar { width: 64px; height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
-.signal-bar i { display: block; height: 100%; background: var(--growth); }
-.signal-big { display: flex; align-items: center; gap: var(--step-3); margin-bottom: var(--step-2); }
-.signal-big .signal-bar { width: 170px; height: 8px; }
-.signal-big b { font-size: 16px; }
-.status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
-.status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-.status.live::before { background: var(--growth); }
-.mult { color: var(--accent-soft); }
-
-/* The model panel: the formula and the category table, set apart from the board by
-   a margin and its own padding, so the explanation reads as a section, not a row. */
-.model { margin-top: var(--step-4); padding: var(--step-5); display: grid; gap: var(--step-3); }
-.formula { font-family: var(--font-num); font-size: 13px; line-height: 1.7; color: var(--muted); overflow-wrap: anywhere; }
-.formula b { color: var(--accent); font-weight: 600; }
-.model table { font-size: 13px; }
-.model th, .model td { padding: var(--step-2) var(--step-3); }
-
-/* The category chart: one row per category, a bar whose length is the multiple,
-   amber when the category prices above the global median and muted when it prices
-   below it, so the model's signal reads as a shape, not a column of numbers. */
-.chart { display: grid; gap: var(--step-2); }
-.chart-row { display: grid; grid-template-columns: 170px minmax(0, 1fr) 230px; align-items: center; gap: var(--step-3); }
-.chart-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chart-track { height: 10px; border-radius: 5px; background: var(--border); overflow: hidden; }
-.chart-track i { display: block; height: 100%; }
-.chart-track i.above { background: var(--accent); }
-.chart-track i.below { background: var(--muted); }
-.chart-val { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.empty { padding: var(--step-7) var(--step-5); text-align: center; display: grid; gap: var(--step-3); justify-items: center; }
-.empty p { color: var(--muted); }
-.button { min-height: 36px; padding: 0 var(--step-4); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); }
-.button.primary { background: var(--accent); border-color: var(--accent); color: var(--canvas); font-weight: 600; }
-
-/* The detail drawer: a fixed panel pinned to the right edge, full height, with its
-   own scroll, so a protocol's model breakdown and farm plan read beside the board. */
-.detail {
-  position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 94vw); z-index: 10;
-  background: var(--surface); color: var(--ink); border: 0; border-left: 1px solid var(--border);
-  padding: var(--step-5); overflow-y: auto; margin: 0 0 0 auto; max-height: 100%;
-}
-.detail::backdrop { background: rgba(5, 12, 20, 0.65); }
-.detail-head { display: flex; align-items: start; justify-content: space-between; gap: var(--step-4); }
-.detail-head > div { min-width: 0; }
-.detail-head .sub { overflow-wrap: anywhere; }
-.close { flex: none; min-width: 32px; min-height: 32px; padding: 0 var(--step-2); white-space: nowrap; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); }
-.detail h2 { margin-top: var(--step-1); font-family: var(--font-display); font-size: 24px; font-weight: 600; }
-.detail .sub { margin-top: var(--step-1); }
-.detail-section { margin-top: var(--step-5); padding-top: var(--step-4); border-top: 1px solid var(--border); }
-.detail-section h3 { margin-bottom: var(--step-2); }
-.equation { display: grid; gap: var(--step-2); font-family: var(--font-num); font-size: 13px; }
-.equation div { display: flex; justify-content: space-between; gap: var(--step-3); }
-.equation span { color: var(--muted); }
-.equation b { font-weight: 500; }
-.steps { margin: 0; padding-left: var(--step-5); display: grid; gap: var(--step-3); }
-.steps li { padding-left: var(--step-1); }
-.steps b { display: block; font-weight: 500; }
-.cost { color: var(--muted); font-size: 12px; font-family: var(--font-num); }
-
-/* Narrow screens: the lede stacks, the scope centres above its side text, and the
-   search input takes the full width, so the board stays usable on a phone. */
-@media (max-width: 900px) {
-  .shell { padding: var(--step-4); }
-  .lede { grid-template-columns: 1fr; gap: var(--step-4); }
-  .scope { flex-direction: column; align-items: flex-start; }
-  .facts { border-top: 0; padding-top: 0; }
-  .field input { min-width: 0; width: 100%; }
-}
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
-}
