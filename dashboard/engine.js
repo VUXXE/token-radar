@@ -8,15 +8,8 @@
   const WRAP_RE = /\b(wrapped|staked|staking)\b/i;
   const EXCL_CATS = new Set(['Bridge', 'Canonical Bridge', 'Liquid Staking', 'Liquid Restaking', 'Restaked BTC', 'CEX']);
   const EXCH_PRE = ['Binance', 'Coinbase', 'Bybit', 'Kraken', 'Bitget', 'OKX', 'Bitfinex', 'Gemini'];
-  const GAS = {
-    Solana: .02, Algorand: .02, Near: .02, Stellar: .02, Sui: .03, Aptos: .03, Sei: .03,
-    Polygon: .05, Sonic: .05, Gnosis: .05, TON: .05, Monad: .1, 'Hyperliquid L1': .1,
-    Mantle: .1, Flare: .1, Plasma: .1, Ink: .12, Unichain: .12, Starknet: .12,
-    Base: .15, Arbitrum: .15, Optimism: .15, Binance: .15, BSC: .15, Berachain: .15,
-    Plume: .15, Katana: .15, Corn: .15, Arc: .15, BSquared: .15,
-    Linea: .2, Scroll: .2, 'zkSync Era': .2, Bittensor: .25, Avalanche: .35, Tron: .8, Bitcoin: 3.5, Ethereum: 5.5,
-  };
-  const CFG = { version: 'radar-5', delta: .5, ridge: 1e-3, catK: 5, resCap: 2.5, oddsL2: 2, oddsCatK: 6, wf: .65, poolPct: .075, actTvl: .35, boost: 2 };
+  const GAS={Solana:.02,Algorand:.02,Near:.02,Stellar:.02,Sui:.03,Aptos:.03,Sei:.03,Polygon:.05,Sonic:.05,Gnosis:.05,TON:.05,Monad:.1,'Hyperliquid L1':.1,Mantle:.1,Flare:.1,Plasma:.1,Ink:.12,Unichain:.12,Starknet:.12,Base:.15,Arbitrum:.15,Optimism:.15,Binance:.15,BSC:.15,Berachain:.15,Plume:.15,Katana:.15,Corn:.15,Arc:.15,BSquared:.15,Linea:.2,Scroll:.2,'zkSync Era':.2,Bittensor:.25,Avalanche:.35,Tron:.8,Bitcoin:3.5,Ethereum:5.5};
+  const CFG={version:'radar-5',delta:.5,ridge:1e-3,catK:5,resCap:2.5,oddsL2:2,oddsCatK:6,wf:.65,poolPct:.075,actTvl:.35,boost:2};
 
   const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   const r4 = (n) => Math.round(n * 1e4) / 1e4;
@@ -292,31 +285,27 @@
   }
 
   function buildRadar(snap) {
-    const lanes = classifyUniverse(snap);
-    const valRes = runValueValidation(lanes.livePricedClean, snap.as_of);
+    const lanes = classifyUniverse(snap), valRes = runValueValidation(lanes.livePricedClean, snap.as_of);
     const oddsUniv = [...lanes.watchlist.map((p) => ({ p, y: 0 })), ...lanes.early.map((p) => ({ p, y: 0 })), ...lanes.live.filter((p) => !exclusionReason(p, snap.floor_usd, false)).map((p) => ({ p, y: 1 }))].sort((a, b) => bySlug(a.p, b.p));
-    const oddsRes = runOddsValidation(oddsUniv, snap.as_of);
-
+    const oddsRes = runOddsValidation(oddsUniv, snap.as_of), { q50, q80 } = valRes.conformal;
     const scored = [...lanes.watchlist, ...lanes.early].map((p) => {
       const age = ageDays(snap.as_of, p.listed_at), cat = p.category || 'Other', lp = predLogVal(valRes.fit, p, snap.as_of);
-      const implied = Math.max(1, Math.round(Math.exp(lp))), { q50, q80 } = valRes.conformal;
-      const odds = forwardLaunchOdds(oddsRes.fit, p, snap.as_of), farm = buildFarmPlan(p, implied, odds.launch_odds, age);
+      const implied = Math.max(1, Math.round(Math.exp(lp))), odds = forwardLaunchOdds(oddsRes.fit, p, snap.as_of), farm = buildFarmPlan(p, implied, odds.launch_odds, age);
       return {
         p, lane: lanes.wlSet.has(p.slug) ? 'watchlist' : 'early', age, catOffset: r4(valRes.fit.catOffsets[cat] || 0), catPeers: valRes.fit.catCounts[cat] || 0,
         implied, low50: Math.max(1, Math.round(Math.exp(lp - q50))), high50: Math.max(implied, Math.round(Math.exp(lp + q50))),
         low80: Math.max(1, Math.round(Math.exp(lp - q80))), high80: Math.max(implied, Math.round(Math.exp(lp + q80))), odds, farm,
       };
     }).sort((a, b) => b.implied - a.implied || bySlug(a.p, b.p));
-
     const verdicts = { FARM: 0, SELECTIVE: 0, SKIP: 0 }, board = [], rows = [];
     scored.forEach((s, i) => {
       const rank = i + 1; verdicts[s.farm.verdict]++;
-      const base = { rank, slug: s.p.slug, name: s.p.name, lane: s.lane, category: s.p.category, chains: s.p.chains, tvl_usd: s.p.tvl_usd, change_7d: s.p.change_7d, listed_at: s.p.listed_at, age_days: s.age, implied_value_usd: s.implied };
+      const { slug, name, category, chains, tvl_usd, change_7d, listed_at } = s.p;
+      const base = { rank, slug, name, lane: s.lane, category, chains, tvl_usd, change_7d, listed_at, age_days: s.age, implied_value_usd: s.implied };
       board.push({ ...base, conformal_low_80: s.low80, conformal_high_80: s.high80, launch_odds: s.odds.launch_odds, farm_verdict: s.farm.verdict, farm_net_per_hour: s.farm.phr, farm_steps: s.farm.step_strings });
-      const { step_strings: _s, ...farmUi } = s.farm;
-      rows.push({ ...base, low_50: s.low50, high_50: s.high50, low_80: s.low80, high_80: s.high80, cat_offset: s.catOffset, cat_peers: s.catPeers, peer_rate_now: s.odds.peer_rate_now, peer_rate_horizon: s.odds.peer_rate_horizon, launch_odds: s.odds.launch_odds, farm: farmUi });
+      const { step_strings: _s, ...farm } = s.farm;
+      rows.push({ ...base, low_50: s.low50, high_50: s.high50, low_80: s.low80, high_80: s.high80, cat_offset: s.catOffset, cat_peers: s.catPeers, peer_rate_now: s.odds.peer_rate_now, peer_rate_horizon: s.odds.peer_rate_horizon, launch_odds: s.odds.launch_odds, farm });
     });
-
     const live = lanes.live.slice().sort((a, b) => (b.mcap_usd || 0) - (a.mcap_usd || 0) || b.tvl_usd - a.tvl_usd || bySlug(a, b)).map((p) => {
       const l = valRes.looMap[p.slug];
       return { slug: p.slug, name: p.name, category: p.category, chains: p.chains, tvl_usd: p.tvl_usd, mcap_usd: p.mcap_usd, change_7d: p.change_7d, symbol: p.symbol, age_days: ageDays(snap.as_of, p.listed_at), in_fit: !!l, loo_pred: l ? l.pred : null, loo_ratio: l ? l.ratio : null };
@@ -329,7 +318,7 @@
         version: CFG.version, as_of: snap.as_of, source: snap.source, floor_usd: snap.floor_usd,
         counts: { total: snap.protocols.length, watchlist: lanes.watchlist.length, early: lanes.early.length, ranked: board.length, excluded: excluded.length, live: live.length, live_priced_clean: lanes.livePricedClean.length, verdicts },
         excl_reasons: lanes.exclCounts,
-        value_model: { beta: valRes.fit.beta, cat_offsets: valRes.fit.catOffsets, cat_counts: valRes.fit.catCounts, q50: valRes.conformal.q50, q80: valRes.conformal.q80, conformal: valRes.conformal, ablation: valRes.table },
+        value_model: { beta: valRes.fit.beta, cat_offsets: valRes.fit.catOffsets, cat_counts: valRes.fit.catCounts, q50, q80, conformal: valRes.conformal, ablation: valRes.table },
         odds_model: { weights: oddsRes.fit.w.map(r4), base_rate: r4(oddsRes.fit.base), universe_n: oddsRes.universeN, wf_test_n: oddsRes.wfTestN, ablation: oddsRes.table, age_curve: oddsRes.ageCurve },
         categories, rows, live, excluded,
       },

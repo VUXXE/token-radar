@@ -276,16 +276,16 @@
         box('Implied Value Decomposition (Huber Power Law)',
           dv('eq-list',
             eq('Intercept (\u03b2\u2080)', b[0].toFixed(4)),
-            eq(`TVL term (${b[1].toFixed(3)} \u00d7 ln ${usd(row.tvl_usd)})`, `+${(b[1] * Math.log(Math.max(1, row.tvl_usd))).toFixed(4)}`),
-            eq(`Chain breadth (${b[2].toFixed(3)} \u00d7 ln(1+${row.chains.length}))`, (b[2] * Math.log(1 + row.chains.length)).toFixed(4)),
-            eq(`Category offset (${cat}, ${row.cat_peers} peers)`, `${row.cat_offset >= 0 ? '+' : ''}${row.cat_offset.toFixed(4)} (\u00d7${Math.exp(row.cat_offset).toFixed(2)})`),
+            eq(`TVL (${b[1].toFixed(3)} \u00d7 ln ${usd(row.tvl_usd)})`, `+${(b[1] * Math.log(Math.max(1, row.tvl_usd))).toFixed(4)}`),
+            eq(`Chains (${b[2].toFixed(3)} \u00d7 ln(1+${row.chains.length}))`, (b[2] * Math.log(1 + row.chains.length)).toFixed(4)),
+            eq(`Category (${cat}, ${row.cat_peers} peers)`, `${row.cat_offset >= 0 ? '+' : ''}${row.cat_offset.toFixed(4)} (\u00d7${Math.exp(row.cat_offset).toFixed(2)})`),
             eq('Implied Launch Value', usd(row.implied_value_usd), 'total'),
-            eq('50% Conformal Range', `${usd(row.low_50)} – ${usd(row.high_50)}`),
-            eq('80% Conformal Range (80% WF cov)', `${usd(row.low_80)} – ${usd(row.high_80)}`)
+            eq('50% Conformal Range', `${usd(row.low_50)}–${usd(row.high_50)}`),
+            eq('80% Conformal Range (80% WF cov)', `${usd(row.low_80)}–${usd(row.high_80)}`)
           ),
-          dv('parity-pill', rec.implied === row.implied_value_usd ? `\u2713 Live browser recompute matches board.json exact (${usd(rec.implied)})` : 'Parity mismatch!')
+          dv('parity-pill', rec.implied === row.implied_value_usd ? `\u2713 Browser recompute matches board.json exact (${usd(rec.implied)})` : 'Parity mismatch!')
         ),
-        box('Empirical Launch Odds (Survival Hazard)', dv('eq-list', eq(`Peer tokenization CDF at age ${age(row.age_days)}`, `${Math.round(row.peer_rate_now * 100)}%`), eq('Peer mature tokenization horizon (5y)', `${Math.round(row.peer_rate_horizon * 100)}%`), eq('Conditional Remaining Launch Odds', `${Math.round(row.launch_odds * 100)}%`, 'total'))),
+        box('Empirical Launch Odds (Survival Hazard)', dv('eq-list', eq(`Peer CDF at age ${age(row.age_days)}`, `${Math.round(row.peer_rate_now * 100)}%`), eq('Peer mature horizon (5y)', `${Math.round(row.peer_rate_horizon * 100)}%`), eq('Remaining Launch Odds', `${Math.round(row.launch_odds * 100)}%`, 'total'))),
         box(`Nearest Live-Token Comps (${cat})`, comps)
       ),
       dv('d-col',
