@@ -1,4 +1,4 @@
-// Node 22 TypeScript bridge & gate validator for Token Radar (radar-5).
+// Node 22 TypeScript bridge & gate validator for Token Radar (radar-6).
 // Loads dashboard/engine.js as the single deterministic source of truth so
 // board.json, data.js, and the browser dashboard execute identical arithmetic.
 
@@ -65,8 +65,54 @@ export interface RadarBundle {
 }
 
 interface EngineApi {
-  buildRadar(snapshot: Snapshot): RadarBundle;
-  recomputeRow(row: unknown, valueModel: unknown): { implied: number };
+  CFG: { version: string; chainCap: number };
+  ageDays(asOf: string, d: string | null): number | null;
+  bySlug(a: { slug: string }, b: { slug: string }): number;
+  r4(n: number): number;
+  r2(n: number): number;
+  exclusionReason(p: SnapshotProtocol, floor: number, isWl: boolean): string | null;
+  classifyUniverse(snap: Snapshot): {
+    wlSet: Set<string>;
+    watchlist: SnapshotProtocol[];
+    early: SnapshotProtocol[];
+    excluded: { protocol: SnapshotProtocol; reason: string }[];
+    live: SnapshotProtocol[];
+    livePricedClean: SnapshotProtocol[];
+    exclCounts: Record<string, number>;
+  };
+  predictLogValue(fit: unknown, p: SnapshotProtocol, asOf: string): number;
+  runValueBenchmarks(peers: SnapshotProtocol[], asOf: string): {
+    fit: { beta: number[]; catOffsets: Record<string, number>; catCounts: Record<string, number> };
+    table: unknown[];
+    conformal: { q50: number; q80: number; [k: string]: unknown };
+    looMap: Record<string, { pred: number; ratio: number }>;
+  };
+  runOddsBenchmarks(univ: { p: SnapshotProtocol; y: number }[], asOf: string): {
+    fit: { weights: number[]; baseRate: number; catRates: Record<string, { rate: number }> };
+    table: unknown[];
+    ageCurve: unknown[];
+    universeN: number;
+    wfTestN: number;
+  };
+  estimateLaunchHazard(fit: unknown, p: SnapshotProtocol, asOf: string): {
+    peer_rate_now: number;
+    peer_rate_horizon: number;
+    launch_odds: number;
+  };
+  buildCostedFarmPlan(
+    p: SnapshotProtocol,
+    implied: number,
+    low50: number,
+    high50: number,
+    odds: number,
+    age: number | null,
+  ): {
+    verdict: 'FARM' | 'SELECTIVE' | 'SKIP';
+    phr: number;
+    step_strings: string[];
+    [k: string]: unknown;
+  };
+  recomputeProtocolValue(row: unknown, valueModel: unknown): { implied: number };
 }
 
 export class SnapshotError extends Error {
@@ -109,19 +155,160 @@ export function parseSnapshot(raw: string): Snapshot {
   return doc as Snapshot;
 }
 
-/** Run the canonical engine and verify 100% browser recomputation parity before returning. */
+/** Run the canonical engine, assemble board.json + window.RADAR, and verify 100% browser parity. */
 export function buildRadar(snapshot: Snapshot): RadarBundle {
-  const result = ENGINE.buildRadar(snapshot);
-  const rows = (result.radar as { rows: unknown[] }).rows;
-  const valueModel = (result.radar as { value_model: unknown }).value_model;
+  const E = ENGINE;
+  const lanes = E.classifyUniverse(snapshot);
+  const valRes = E.runValueBenchmarks(lanes.livePricedClean, snapshot.as_of);
+  const oddsUniv = [
+    ...lanes.watchlist.map((p) => ({ p, y: 0 })),
+    ...lanes.early.map((p) => ({ p, y: 0 })),
+    ...lanes.live.filter((p) => !E.exclusionReason(p, snapshot.floor_usd, false)).map((p) => ({ p, y: 1 })),
+  ].sort((a, b) => E.bySlug(a.p, b.p));
+  const oddsRes = E.runOddsBenchmarks(oddsUniv, snapshot.as_of);
+  const { q50, q80 } = valRes.conformal;
+
+  const scored = [...lanes.watchlist, ...lanes.early].map((p) => {
+    const age = E.ageDays(snapshot.as_of, p.listed_at);
+    const cat = p.category || 'Other';
+    const lp = E.predictLogValue(valRes.fit, p, snapshot.as_of);
+    const implied = Math.max(1, Math.round(Math.exp(lp)));
+    const low50 = Math.max(1, Math.round(Math.exp(lp - q50)));
+    const high50 = Math.max(implied, Math.round(Math.exp(lp + q50)));
+    const low80 = Math.max(1, Math.round(Math.exp(lp - q80)));
+    const high80 = Math.max(implied, Math.round(Math.exp(lp + q80)));
+    const odds = E.estimateLaunchHazard(oddsRes.fit, p, snapshot.as_of);
+    const farm = E.buildCostedFarmPlan(p, implied, low50, high50, odds.launch_odds, age);
+    return {
+      p,
+      lane: (lanes.wlSet.has(p.slug) ? 'watchlist' : 'early') as 'watchlist' | 'early',
+      age,
+      catOffset: E.r4(valRes.fit.catOffsets[cat] || 0),
+      catPeers: valRes.fit.catCounts[cat] || 0,
+      implied,
+      low50,
+      high50,
+      low80,
+      high80,
+      odds,
+      farm,
+    };
+  }).sort((a, b) => b.implied - a.implied || E.bySlug(a.p, b.p));
+
+  const verdicts = { FARM: 0, SELECTIVE: 0, SKIP: 0 };
+  const board: BoardRow[] = [];
+  const rows: Record<string, unknown>[] = [];
+  scored.forEach((s, i) => {
+    const rank = i + 1;
+    verdicts[s.farm.verdict]++;
+    const { slug, name, category, chains, tvl_usd, change_7d, listed_at } = s.p;
+    const base = { rank, slug, name, lane: s.lane, category, chains, tvl_usd, change_7d, listed_at, age_days: s.age, implied_value_usd: s.implied };
+    board.push({
+      ...base,
+      conformal_low_80: s.low80,
+      conformal_high_80: s.high80,
+      launch_odds: s.odds.launch_odds,
+      farm_verdict: s.farm.verdict,
+      farm_net_per_hour: s.farm.phr,
+      farm_steps: s.farm.step_strings,
+    });
+    const { step_strings: _omitted, ...farm } = s.farm;
+    rows.push({
+      ...base,
+      low_50: s.low50,
+      high_50: s.high50,
+      low_80: s.low80,
+      high_80: s.high80,
+      cat_offset: s.catOffset,
+      cat_peers: s.catPeers,
+      peer_rate_now: s.odds.peer_rate_now,
+      peer_rate_horizon: s.odds.peer_rate_horizon,
+      launch_odds: s.odds.launch_odds,
+      farm,
+    });
+  });
+
+  const live = lanes.live
+    .slice()
+    .sort((a, b) => (b.mcap_usd || 0) - (a.mcap_usd || 0) || b.tvl_usd - a.tvl_usd || E.bySlug(a, b))
+    .map((p) => {
+      const l = valRes.looMap[p.slug];
+      return {
+        slug: p.slug, name: p.name, category: p.category, chains: p.chains, tvl_usd: p.tvl_usd, mcap_usd: p.mcap_usd,
+        change_7d: p.change_7d, symbol: p.symbol, age_days: E.ageDays(snapshot.as_of, p.listed_at),
+        in_fit: !!l, loo_pred: l ? l.pred : null, loo_ratio: l ? l.ratio : null,
+      };
+    });
+
+  const excluded = lanes.excluded
+    .slice()
+    .sort((a, b) => b.protocol.tvl_usd - a.protocol.tvl_usd || E.bySlug(a.protocol, b.protocol))
+    .map(({ protocol: p, reason }) => ({
+      slug: p.slug, name: p.name, category: p.category, chains: p.chains, tvl_usd: p.tvl_usd, change_7d: p.change_7d, reason,
+    }));
+
+  const categories = Object.keys(valRes.fit.catOffsets)
+    .map((c) => ({
+      category: c,
+      peers: valRes.fit.catCounts[c] || 0,
+      offset: E.r4(valRes.fit.catOffsets[c]),
+      mult: E.r2(Math.exp(valRes.fit.catOffsets[c])),
+      token_rate: oddsRes.fit.catRates[c] ? Math.round(oddsRes.fit.catRates[c].rate * 100) : null,
+    }))
+    .sort((a, b) => b.peers - a.peers || (a.category < b.category ? -1 : 1));
+
+  const valueModel = {
+    beta: valRes.fit.beta,
+    chain_cap: E.CFG.chainCap,
+    cat_offsets: valRes.fit.catOffsets,
+    cat_counts: valRes.fit.catCounts,
+    q50,
+    q80,
+    conformal: valRes.conformal,
+    ablation: valRes.table,
+  };
+
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i] as { slug: string; implied_value_usd: number };
-    const check = ENGINE.recomputeRow(r, valueModel);
+    const check = E.recomputeProtocolValue(r, valueModel);
     if (check.implied !== r.implied_value_usd) {
       throw new Error(`browser parity mismatch on ${r.slug}: ${check.implied} != ${r.implied_value_usd}`);
     }
   }
-  return result;
+
+  return {
+    board,
+    radar: {
+      version: E.CFG.version,
+      as_of: snapshot.as_of,
+      source: snapshot.source,
+      floor_usd: snapshot.floor_usd,
+      counts: {
+        total: snapshot.protocols.length,
+        watchlist: lanes.watchlist.length,
+        early: lanes.early.length,
+        ranked: board.length,
+        excluded: excluded.length,
+        live: live.length,
+        live_priced_clean: lanes.livePricedClean.length,
+        verdicts,
+      },
+      excl_reasons: lanes.exclCounts,
+      value_model: valueModel,
+      odds_model: {
+        weights: oddsRes.fit.weights.map(E.r4),
+        base_rate: E.r4(oddsRes.fit.baseRate),
+        universe_n: oddsRes.universeN,
+        wf_test_n: oddsRes.wfTestN,
+        ablation: oddsRes.table,
+        age_curve: oddsRes.ageCurve,
+      },
+      categories,
+      rows,
+      live,
+      excluded,
+    },
+  };
 }
 
 /** Verify every board gate invariant before writing /output. */
