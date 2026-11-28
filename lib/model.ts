@@ -1,4 +1,4 @@
-// Node 22 TypeScript bridge & gate validator for Token Radar (radar-6).
+// Node 22 TypeScript bridge & gate validator for Token Radar (radar-7).
 // Loads dashboard/engine.js as the single deterministic source of truth so
 // board.json, data.js, and the browser dashboard execute identical arithmetic.
 
@@ -68,8 +68,8 @@ interface EngineApi {
   CFG: { version: string; chainCap: number };
   ageDays(asOf: string, d: string | null): number | null;
   bySlug(a: { slug: string }, b: { slug: string }): number;
-  r4(n: number): number;
-  r2(n: number): number;
+  round4(n: number): number;
+  round2(n: number): number;
   exclusionReason(p: SnapshotProtocol, floor: number, isWl: boolean): string | null;
   classifyUniverse(snap: Snapshot): {
     wlSet: Set<string>;
@@ -183,7 +183,7 @@ export function buildRadar(snapshot: Snapshot): RadarBundle {
       p,
       lane: (lanes.wlSet.has(p.slug) ? 'watchlist' : 'early') as 'watchlist' | 'early',
       age,
-      catOffset: E.r4(valRes.fit.catOffsets[cat] || 0),
+      catOffset: E.round4(valRes.fit.catOffsets[cat] || 0),
       catPeers: valRes.fit.catCounts[cat] || 0,
       implied,
       low50,
@@ -251,8 +251,8 @@ export function buildRadar(snapshot: Snapshot): RadarBundle {
     .map((c) => ({
       category: c,
       peers: valRes.fit.catCounts[c] || 0,
-      offset: E.r4(valRes.fit.catOffsets[c]),
-      mult: E.r2(Math.exp(valRes.fit.catOffsets[c])),
+      offset: E.round4(valRes.fit.catOffsets[c]),
+      mult: E.round2(Math.exp(valRes.fit.catOffsets[c])),
       token_rate: oddsRes.fit.catRates[c] ? Math.round(oddsRes.fit.catRates[c].rate * 100) : null,
     }))
     .sort((a, b) => b.peers - a.peers || (a.category < b.category ? -1 : 1));
@@ -296,8 +296,8 @@ export function buildRadar(snapshot: Snapshot): RadarBundle {
       excl_reasons: lanes.exclCounts,
       value_model: valueModel,
       odds_model: {
-        weights: oddsRes.fit.weights.map(E.r4),
-        base_rate: E.r4(oddsRes.fit.baseRate),
+        weights: oddsRes.fit.weights.map(E.round4),
+        base_rate: E.round4(oddsRes.fit.baseRate),
         universe_n: oddsRes.universeN,
         wf_test_n: oddsRes.wfTestN,
         ablation: oddsRes.table,
